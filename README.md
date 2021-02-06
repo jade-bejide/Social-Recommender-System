@@ -8,7 +8,7 @@ Streaming and video entertainment platforms (such as YouTube, Netflix, Amazon Pr
 ### Problem Solution
 Most people like to get movie or television show recommendations through word-of-mouth/face-to-face/any other communication channel. This project will automate this process. It aims to evaluate whether a user's ability to customise their nearest neighbours by allowing users to follow other users on the system will increase recommendation satisfaction. User's followings who are most similar to that user will have the most significant influence on user's recommendations
 
-#### Summarised Aim
+#### Summarised Aims
 
 * Increase Recommendations Satisfaction
 * Allows users to customise the extent to which other user's data influences their own recommendation by allowing users to 'follow' other users on the system.
