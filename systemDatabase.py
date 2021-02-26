@@ -21,7 +21,7 @@ conn.commit()
 c.execute('''CREATE TABLE recommendations (
     recommendationId INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER NOT NULL,
-    title TEXT NOT NULL,
+    imdbId TEXT NOT NULL,
     FOREIGN KEY (userId) REFERENCES users(userId)
 )''')
 conn.commit()
@@ -57,7 +57,7 @@ conn.commit()
 c.execute('''CREATE TABLE usersRatedTitles (
     entryId INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER NOT NULL,
-    title BLOB NOT NULL,
+    imdbId TEXT NOT NULL,
     rating INTEGER NOT NULL,
     FOREIGN KEY (userId) REFERENCES users(userId)
     )''')
@@ -66,9 +66,9 @@ conn.commit()
 c.execute('''CREATE TABLE unseenTitles (
     entryId INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER NOT NULL,
-    title BLOB NOT NULL,
-    predictedRating DECIMAL NOT NULL,
-    recommended BOOLEAN NOT NULL,
+    imdbId TEXT NOT NULL,
+    predictedRating DECIMAL,
+    recommended BOOLEAN,
     FOREIGN KEY (userId) REFERENCES users(userId)
     )''')
 conn.commit()
