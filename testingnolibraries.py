@@ -122,9 +122,6 @@ class Users(object):
 
     def followUser(self, user):
         global conn
-        #sets user to follow desired user
-        self._followings.append(user)
-
         #updates selected user's followers
         c = conn.cursor()
         #gets user to follow's id
@@ -163,14 +160,6 @@ class Users(object):
 
     def getFollowings(self):
         return self._followings
-
-    def setFollower(self, user):
-        global conn
-        #updates user's followers when they are followed
-
-        user._followers.append(user)
-
-        '''INSERT INTO user_followers (userId, user, user_followedBy) VALUES (self.getId(), self.getUsername());"'''
 
     def getFollowers(self):
         return self._followers
@@ -802,7 +791,7 @@ def ShowHomePageWindow(user, window):
     ratingsButton = PushButton(buttonsBox, text="Start Rating", command=lambda:initialiseRatingsWindow(app, user, setMoviesToRate.value), align="left")
     profileButton = PushButton(buttonsBox, text="See Profile", command=lambda:ShowProfileWindow(app, user), align="right")
 
-    app.on_close(lambda:logOffUser(user, app))
+    app.when_closed(lambda:logOffUser(user, app))
     app.display()
     
 
@@ -826,9 +815,9 @@ def ShowNewUserWindow(app):
     username_label = Text(newUserWindow, text="Username: ")
     newUser_inputUsername = TextBox(newUserWindow)
     password_label = Text(newUserWindow, text="Password: ")
-    newUser_inputPassword = TextBox(newUserWindow)
+    newUser_inputPassword = TextBox(newUserWindow, hide_text=True)
     password2_label = Text(newUserWindow, text="Enter password again: ")
-    newUser_inputPasswordAgain = TextBox(newUserWindow)
+    newUser_inputPasswordAgain = TextBox(newUserWindow, hide_text=True)
     newUser_createAccount = PushButton(newUserWindow, text="Create Account", command=lambda:createAccount(newUser_inputUsername.value, newUser_inputPassword.value, newUser_inputPasswordAgain.value, newUserWindow))
 
 def ShowExistingUserWindow(app):
@@ -838,7 +827,7 @@ def ShowExistingUserWindow(app):
     username_label = Text(existingUserWindow, text="Username: ")
     existingUser_inputUsername = TextBox(existingUserWindow)
     password_label = Text(existingUserWindow, text="Password: ")
-    existingUser_inputPassword = TextBox(existingUserWindow)
+    existingUser_inputPassword = TextBox(existingUserWindow, hide_text=True)
     existingUser_createAccount = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
 
 def ShowInsufficientPasswordWindow(window):
