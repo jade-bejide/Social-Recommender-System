@@ -3,6 +3,7 @@ import sqlite3
 import json
 import urllib
 import numpy as np
+import math
 import requests
 import random
 from PIL import *
@@ -11,9 +12,10 @@ import sys
 sys.setrecursionlimit(6400)
 
 ##26/02/21 To Do:
-#Begin Structuring See Profile Functionality
 #Connect Software to Remote server so database can be accessed anywhere, 24/7
 
+#12/03/21 To Do:
+#Matrix Factorisation to calaculate unseen titles that should be added to the user's recommendations based on their similar followings.
 
 conn = sqlite3.connect('system.db')
 
@@ -29,12 +31,9 @@ imdbIDs = ['0805647', '0468569', '0167260', '0120737', '0133093', '0245429', '01
            '7569576','11794642','0413573','1190634','0944947','5171438','2442560','1520211','1844624','0386676',
            '10048342','8111088','0903747','0108778','0364845','4574334']
 
-
-def setUpUnseenTitles():
-    global system, imdbIDs, Movie, TVShow
-
-    
-    for item in imdbIDs:
+def createTitleObjects(dataset):
+    global system, Movie, TVShow
+    for item in dataset:
         #scraps the data of the imdb
         currentTitle = requests.get("http://www.omdbapi.com/?i=tt" + item + "&apikey=8598b952")
 
@@ -53,12 +52,32 @@ def setUpUnseenTitles():
             titleobject = TVShow(currentTitle['Poster'], currentTitle['Title'], currentTitle['Genre'], item)
 
 
-        system.getUnseenQueue().enqueue(titleobject)    
+        system.getUnseenQueue().enqueue(titleobject) 
+
+def setUpUnseenTitles(user):
+    global imdbIDs, conn
+    c = conn.cursor()
+
+    #checks whether the user has rated titles before
+    unseenTitles_query = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
+    conn.commit()
+    unseenTitles = []
+    for row in unseenTitles_query:
+        unseenTitles.append(row[0])
+
+    #if the user has rated titles before, the program loads in titles the user hasn't rated
+    if unseenTitles != []:
+        createTitleObjects(unseenTitles)
+    else:
+        #else it loads in all tiles
+        createTitleObjects(imdbIDs)
+   
 
 #Users Class
 class Users(object):
     def __init__(self, username, password):
         self._username = username
+        #Review whether storing the password is necessary
         self._password = password
         self._recommendations = []
         self._followings = []
@@ -66,13 +85,15 @@ class Users(object):
         self._ratedGenres = []
         self._ratedTitles = []
         self._genreScores = []
+        #saves saved genre scores from database (needed when calculating nearest neighbours)
+        self._genreScoresExternal = []
         self._connectsTo = {username: {}}
 
     def getId(self):
         global conn
 
         c = conn.cursor()
-
+        #gets the user's id from the database, this is useful to quickly query other tables in the database as appropriate
         userIdQuery = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(self.getUsername()))
 
         rows = userIdQuery.fetchall()
@@ -98,8 +119,35 @@ class Users(object):
     def getGenreScores(self):
         return self._genreScores
 
+    def createGenreScoresExternal(self):
+        #gets genre scores from database
+        global conn
+        c= conn.cursor()
+        #creates the template for the genre scores
+        template = {"genre": None, "averageRating": None, "timesRated": None}
+        #queries user's genre rating data
+        genreScores_query = c.execute('''SELECT genre, averageRating, timesRated FROM ratingsMatrix WHERE userId = '{}';'''.format(self.getId()))
+        conn.commit()
+        
+        for row in genreScores_query:
+            #saves the data internally in the system during the user's log in session
+            template["genre"] = row[0]
+            template["averageRating"] = row[1]
+            template["timesRated"] = row[2]
+            self.setGenreScoresExternal(template)
+            template = {"genre": None, "averageRating": None, "timesRated": None}
+
+        c.close()
+
+    def getGenreScoresExternal(self):
+        return self._genreScoresExternal
+        
+
     def setGenreScores(self, score):
         self._genreScores.append(score)
+
+    def setGenreScoresExternal(self, score):
+        self._genreScoresExternal.append(score)
 
     def getUsername(self):
         return self._username
@@ -107,13 +155,14 @@ class Users(object):
     def getPassword(self):
         return self._password
 
-    def getConnectsTo(self):
+    def getConnections(self):
         return self._connectsTo
 
     def setConnectsTo(self, connection):
         self._connectsTo[self.getUsername()][connection[0]] = connection[1]
 
     def sortConnections(self):
+        #sorts users followings based on least to most similar users (range from 0 <= x <= 2pi - where x is the cosine similarity between two users)
         self._connectsTo[self.getUsername()] = sorted(self._connectsTo[self.getUsername()], key=self._connectsTo[self.getUsername()].get)
         
     def rate_titles(self, title):
@@ -121,7 +170,7 @@ class Users(object):
         showRatingsWindow(self, title)
 
     def followUser(self, user):
-        global conn
+        global conn, system
         #updates selected user's followers
         c = conn.cursor()
         #gets user to follow's id
@@ -129,14 +178,25 @@ class Users(object):
         conn.commit()
         for row in userToFollow_id:
             userToFollow_id = row[0]
-        #inserts user into followings
-        c.execute('''INSERT INTO userFollowings(userId, user_follows) VALUES ('{}', '{}');'''.format(self.getId(), userToFollow_id))
-        conn.commit()
-        #updates user to follow's followers
-        c.execute('''INSERT INTO userFollowers(userId, user_followedBy) VALUES ('{}', '{}');'''.format(userToFollow_id, self.getId()))
-        conn.commit()
 
+        followingsQuery = c.execute('''SELECT * from userFollowings WHERE userId = '{}';'''.format(self.getId()))
+        conn.commit()
+        followers = []
+        for row in followingsQuery:
+            followers.append(row[0])
+        if userToFollow_id not in followers:
+            #inserts user into followings
+            c.execute('''INSERT INTO userFollowings(userId, user_follows) VALUES ('{}', '{}');'''.format(self.getId(), userToFollow_id))
+            conn.commit()
+            #updates user to follow's followers
+            c.execute('''INSERT INTO userFollowers(userId, user_followedBy) VALUES ('{}', '{}');'''.format(userToFollow_id, self.getId()))
+            conn.commit()
+        else:
+            pass
+            #the user already follows that user
         c.close()
+
+        system.updateUsersSimilarity(self,user)
 
     def unfollowUser(self, user):
         global conn
@@ -158,6 +218,20 @@ class Users(object):
 
         c.close()
 
+    #gets followings from external database to be copied into the user's followings attribute when the user logs into a new session
+    def updateFollowings(self):
+        global conn, system
+        c = conn.cursor()
+        followings_query = c.execute('''SELECT users.username FROM users JOIN userFollowings WHERE users.userId=userFollowings.user_follows AND userFollowings.userId = '{}';'''.format(self.getId()))
+        conn.commit()
+        for row in followings_query:
+            if row not in self.getFollowings():
+                self._followers.append(row[0])
+                #updates user similarity with their followings
+                system.updateUsersSimilarity(self, row[0])
+
+        c.close()
+
     def getFollowings(self):
         return self._followings
 
@@ -165,7 +239,7 @@ class Users(object):
         return self._followers
 
     def setRecommendations(self, title, predictedRating):
-        global conn        
+        global conn, system        
         #updates recommendations in program
         self._recommendations.append(title)
 
@@ -192,6 +266,12 @@ class Users(object):
         c.execute('''INSERT INTO recommendations (userId, imdbId) VALUES ('{}', '{}');'''.format(self.getId(), title.getId()))
         conn.commit()
         c.close()
+
+        #calculates cosine similarity between user and their followings
+##
+        (self.getFollowings())
+##        for following in self.getFollowings():
+            
         
 #Titles Class
 
@@ -226,12 +306,18 @@ class Title(object):
     def setRating(self, user, userRating):
         global conn
         c = conn.cursor()
+        #saves rated title into database
         c.execute('''INSERT INTO usersRatedTitles (userId, imdbId, rating) VALUES ('{}', '{}', '{}');'''.format(user.getId(), self.getId(), userRating))
+        conn.commit()
+        #when the title has been rated by the user, it is removed from the unseenTitles table in the database,
+        #so that when the titles are next loaded into the system, the user does not rerate titles
+        c.execute('''DELETE FROM unseenTitles where imdbId = '{}' AND userID = '{}';'''.format(self.getId(), user.getId()))
         conn.commit()
         c.close()
 
     def getRating(self, user):
         global conn
+        #gets users rating of a title from the external database
         c = conn.cursor()
         ratingQuery = c.execute('''SELECT rating FROM usersRatedTitles WHERE imdbId = '{}' AND userId = '{}';'''.format(self.getId(), user.getId()))
         rows = ratingQuery.fetchall()
@@ -259,6 +345,7 @@ class TVShow(Title):
 
 #Queue Classes
 class TitleQueue(object):
+    #Operates as a linear queue
     def __init__(self, maxsize):
         self._usedPositions = 0
         self._maxsize = maxsize
@@ -329,6 +416,7 @@ class TitleQueue(object):
         return data
 
 class TitlePriorityQueue(TitleQueue):
+    #Customised to operate as a priority queue with priority scores based on user's previous rating activity
     def __init__(self,maxsize):
         super().__init__(maxsize)
 
@@ -409,9 +497,32 @@ class RecommenderSystem():
 
     def generateRecommendations(self, user):
         global conn
+
+        #updates cosine similarity between user and their followings
+        for following in user.getFollowings():
+            self.updateUsersSimilarity(user, following)
+
+        c = conn.cursor()
+
+        ratedGenres_query = c.execute('''SELECT genre FROM ratingsMatrix WHERE userId = '{}';'''.format(user.getId()))
+        ratedGenres = []
+        for row in ratedGenres_query:
+            ratedGenres.append(row[0])
+
         #create a queue object of remaining titles
         for i in range(0, len(user.getGenreScores())):
             user.getGenreScores()[i]["averageRating"] = user.getGenreScores()[i]["averageRating"] / user.getGenreScores()[i]["timesRated"]
+            if user.getGenreScores()[i]["genre"] in ratedGenres:
+                c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[i]["averageRating"], 2), user.getId(), user.getGenreScores()[i]["genre"]))
+                conn.commit()
+                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[i]["timesRated"], user.getId(), user.getGenreScores()[i]["genre"]))
+                conn.commit()
+            else:
+                c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), user.getGenreScores()[i]["genre"], user.getGenreScores()[i]["averageRating"], user.getGenreScores()[i]["timesRated"]))
+                conn.commit()
+
+        c.close()
+            
 
         for j in range(system.getUnseenQueue().getFront(), system.getUnseenQueue().getRear()):
             title = system.getUnseenQueue().getDataset()[j]
@@ -445,47 +556,110 @@ class RecommenderSystem():
                     conn.commit()
                 c.close()
 
+    #user1 - object, user2 - string (username)
     def setUpVectors(self, user1, user2):
-        user1Vector = []
-        user2Vector = []
+        global conn
+        values_user1 = []
+        values_user2 = []
+        c = conn.cursor()
+        #gets user2's id directly from database
+        user2Id_query = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        conn.commit()
+        for row in user2Id_query:
+            user2Id = row[0]
+        #saves list of user2's rated genres
+        user2_ratedGenres_query = c.execute('''SELECT genre FROM ratingsMatrix
+WHERE userId = '{}';'''.format(user2Id))
+        conn.commit()
+        user2_ratedGenres = []
+        for row in user2_ratedGenres_query:
+            user2_ratedGenres.append(row[0])
 
-        for i in range(0, len(user1.getRatedTitles())):
-            if user1.getRatedTitles()[i] in user2.getRatedTitles():
-                user1Vector.append([user1.getRatedTitles()[i], user1.getRatedTitles()[i].getRating(user1)])
-                user2Vector.append([user1.getRatedTitles()[i], user1.getRatedTitles()[i].getRating(user2)])
+        c.close()
+        #prevents database locking from too many queries -
+        #this will hopefully not be needed as much when switching to a multiuser remote SQL database
+        c = conn.cursor()
+
+        #creates 2 1xn (where n is the number of genres rated by user1) for user1 and user 2 -
+        #the user's following, with the elements being the average
+        #rating of that genre by both users respectively (or zero if user2 has not rated that genre)
+        user1.createGenreScoresExternal()
+        for i in range(0, len(user1.getGenreScoresExternal())):
+            values_user1.append([user1.getGenreScoresExternal()[i]["averageRating"]])
+            if user1.getGenreScoresExternal()[i]["genre"] in user2_ratedGenres:
+                genreRating_query = c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
+genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
+                conn.commit()
+                for row in genreRating_query:
+                    genreRating = row[0]
+                values_user2.append([genreRating])
             else:
-                user1Vector.append([user1.getRatedTitles()[i], user1.getRatedTitles()[i].getRating(user1)])
-                user2Vector.append([user1.getRatedTitles()[i], 0])
+                values_user2.append([0])
+        c.close()
+
+        #using the python library numPy
+        user1Vector = np.array(values_user1)
+        user2Vector = np.array(values_user2)
 
         return user1Vector, user2Vector
+
+
+    def dotProduct1byN(self, a, b):
+        dotProduct = 0
+        for i in range(0,len(a)):
+            dotProduct += a[i][0] * b[i][0]
+
+        return dotProduct
+        
 
     def calcMagnitude(self, vector):
         vector_magnitude = 0
         for i in range(0, len(vector)):
-            vector_magnitude += (vector[i][1]**2)
+            vector_magnitude += (vector[i][0]**2)
 
         return vector_magnitude
 
-    def calcSimilarity(self, user1Vector, user2Vector):
+    def calcSimilarity(self, user1Vector, user2Vector, user1, user2):
+        global conn
+
+##        user_vectors = setUpVectors(user1, user2)
+##        user1Vector = user_vectors[0]
+##        user2Vector = user_vectors[1]
         #uses pre-built library to calculate the dot product of the vectors
-        dotProduct = dot(user1Vector, user2Vector)
+        dotProduct = self.dotProduct1byN(user1Vector, user2Vector)
 
         #calculates the magnitude of both vectors
         user1Vector_magnitude = self.calcMagnitude(user1Vector)
         user2Vector_magnitude = self.calcMagnitude(user2Vector)
 
         #calculates cosine similarity
-        cosineSimilarity = dotProduct / (user1Vector_magnitude * user2Vector_magnitude)
+        if user1Vector_magnitude == 0 or user2Vector_magnitude == 0:
+            cosineSimilarity = 0
+        else:
+            #the values should lie between 0 and 2pi (2pi is approximately 6.283185307) - result is in radians
+            cosineSimilarity = math.acos(dotProduct / (user1Vector_magnitude * user2Vector_magnitude))
+
+        c = conn.cursor()
+        #gets user2's id directly from database
+        user2Id_query = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        conn.commit()
+        for row in user2Id_query:
+            user2Id = row[0]
+        cosineSimilarity = round(cosineSimilarity, 3)
+        c.execute('''UPDATE userFollowings SET cosineSimilarity = '{}' where userId = '{}' and user_follows = '{}';'''.format(cosineSimilarity, user1.getId(), user2Id))
+        conn.commit()
+        c.close()
 
         return cosineSimilarity
 
-    def UpdateUsersSimilarity(self, user1, user2, similarity):
+    def updateUsersSimilarity(self, user1, user2):
         #updates user's similarity adjacency list
-        user1.setConnectsTo([user2, self.calcSimilarity(self.setUpVectors(user1, user2))])
+        records = self.setUpVectors(user1, user2)
+        user1.setConnectsTo([user2, self.calcSimilarity(records[0], records[1], user1, user2)])
 
         #sorts adjacency list by cosine similarity value to prioritise user's following by who is most similar
 
-        user1.sortConnectsTo()
+        user1.sortConnections()
 
     def addToUnseenQueue(self, user, title, window, rateCapacity):
         global conn, rateTracker
@@ -561,9 +735,7 @@ def refreshWindow(window, user, rateCapacity):
 
 def showRatingsWindow(window, user, rateCapacity):
     global system, title_title, title_image, star_1, star_2, star_3, star_4, star_5
-
-    #title = system.getUnseenQueue.dequeue()
-
+    #Builds the layout of the ratings window
     title = system.getUnseenQueue().dequeue()
 
     ratingWindow = Window(window, title="Rating Movies", height=700, width=500)
@@ -580,6 +752,7 @@ def showRatingsWindow(window, user, rateCapacity):
     title_image = Picture(titleBox, image='coverImage.png')
     title_image.resize(300, 446)
 
+    #Remember to change these buttons to star icons at the end of primary development
     star_1 = PushButton(rateBox, text="1", command=lambda:system.saveRating(user, title, 1, ratingWindow, rateCapacity))
     star_2 = PushButton(rateBox, text="2", command=lambda:system.saveRating(user, title, 2, ratingWindow, rateCapacity))
     star_3 = PushButton(rateBox, text="3", command=lambda:system.saveRating(user, title, 3, ratingWindow, rateCapacity))
@@ -588,7 +761,6 @@ def showRatingsWindow(window, user, rateCapacity):
     unseenTitle_btn = PushButton(rateBox, text="Skip", command = lambda:system.addToUnseenQueue(user, title, ratingWindow, rateCapacity))
    
 def initialiseRatingsWindow(window, user, rateCapacity):
-    #needs to be fixed to meet testing requirements of test id 6
     global system, rateTracker
 
     rateTracker = 0
@@ -607,6 +779,7 @@ def initialiseRatingsWindow(window, user, rateCapacity):
 def logOffUser(user, window):
     global conn
     c = conn.cursor()
+    #informs the external database that the user has now logged off
     c.execute('''UPDATE users SET loggedIn = 0 WHERE username = "{}"'''.format(user.getUsername()))
     conn.commit()
     c.close()
@@ -654,13 +827,13 @@ userFollowings JOIN users WHERE userFollowings.user_follows=users.userId AND use
 
 def searchUser(window, user, searchValue):
     global conn
-
+    #allows the user to search for other users on the database
+    #12/03/21 - Wishlist - update this so that only one list box is present every time the user presses the 'search' button
     c = conn.cursor()
     searchQuery = c.execute('''SELECT * FROM users WHERE username LIKE '%{}%';'''.format(searchValue))
     conn.commit()
     users = []
     for row in searchQuery:
-        print(row)
         users.append(row[1])
     usersList = ListBox(window, items=users)
     btn_follow = PushButton(window, text="Follow", command=lambda:user.followUser(usersList.value))
@@ -680,6 +853,8 @@ def openSearchEngine(user, window):
     
 def ShowProfileWindow(window, user):
     global conn
+    #queries database to log all of users followings to the system
+    
     profileWindow = Window(window, title=user.getUsername() + "'s Profile")
     txt_username = Text(profileWindow, text=user.getUsername())
 
@@ -776,7 +951,10 @@ def ShowRecommendationsWindow(window, user):
         togglePosition(position, recommendationsWindow, recommendations)
     
 def ShowHomePageWindow(user, window):
+    #Sets up the layout for the home page window
     window.destroy()
+    user.updateFollowings()
+    setUpUnseenTitles(user)
     app = App("Rate Movies!", height=250, width=350)
 
     welcome = Text(app, text="Welcome " + user.getUsername() + "!")
@@ -796,6 +974,7 @@ def ShowHomePageWindow(user, window):
     
 
 def ShowLoginScreen():
+    #sets up the layout for the log in screen
     app = App("Login in to 'Rate Movies!'", height=250, width=300)
 
     #check to see if the user is new or existing
@@ -808,6 +987,7 @@ def ShowLoginScreen():
 
 def ShowNewUserWindow(app):
     global Users
+    #sets up the layout for the new user window
     newUserWindow = Window(app, title="Create an account")
     
 
@@ -821,6 +1001,7 @@ def ShowNewUserWindow(app):
     newUser_createAccount = PushButton(newUserWindow, text="Create Account", command=lambda:createAccount(newUser_inputUsername.value, newUser_inputPassword.value, newUser_inputPasswordAgain.value, newUserWindow))
 
 def ShowExistingUserWindow(app):
+    #sets up the layout for the existing user window
     existingUserWindow = Window(app, title="Login into an existing account")
 
     welcome_existingUser = Text(existingUserWindow, text="Login to your account")
@@ -830,6 +1011,7 @@ def ShowExistingUserWindow(app):
     existingUser_inputPassword = TextBox(existingUserWindow, hide_text=True)
     existingUser_createAccount = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
 
+#Password and Username authentication subroutines
 def ShowInsufficientPasswordWindow(window):
     insufficientDetails= Text(window, text="Password is insufficient")
     
@@ -862,6 +1044,8 @@ def ShowIncorrectDetailsWindow(window):
     incorrectDetailsError = Text(window, text="Incorrect Password details!")
 
 def createAccount(username, password, authenticate, window):
+    #creates an account for a new user, instatiating an object for the user's current log in session as well as recording
+    #their details in the external database
     global conn, Users
     c = conn.cursor()
     usernames = c.execute('''SELECT username FROM users;''')
@@ -952,6 +1136,7 @@ def authenticateUser(username, password, window):
 
     c.close()
 
+    #checks if such a user exists in the database
     if username not in usernames_list:
         ShowNoSuchUserWindow(window)
         return False
@@ -963,13 +1148,16 @@ def authenticateUser(username, password, window):
         passwordMatch = row[0]
 
     c.close()
+    #hash look up for the password
     password = hashPassword(password)
 
+    #authenticates the user's password
     if password != passwordMatch:
         ShowIncorrectDetailsWindow(window)
     else:
         user = Users(username, password)
         c = conn.cursor()
+        #notifies the program that the user has logged into the system
         c.execute('''UPDATE users SET loggedIn = 1 WHERE username = '{}';'''.format(user.getUsername()))
         conn.commit()
         c.close()
@@ -990,7 +1178,5 @@ def hashPassword(password):
 
 #Main Program
 system = RecommenderSystem()
-
-setUpUnseenTitles()
 
 ShowLoginScreen()

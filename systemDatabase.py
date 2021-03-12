@@ -49,6 +49,7 @@ c.execute('''CREATE TABLE userFollowings (
     entryId INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER NOT NULL,
     user_follows INTEGER NOT NULL,
+    cosineSimilarity REAL,
     FOREIGN KEY (userId) REFERENCES users(userId),
     FOREIGN KEY (user_follows) REFERENCES users(userId)
     )''')
