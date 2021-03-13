@@ -87,7 +87,7 @@ class Users(object):
         self._genreScores = []
         #saves saved genre scores from database (needed when calculating nearest neighbours)
         self._genreScoresExternal = []
-        self._connectsTo = {username: {}}
+        self._connectsTo = []
 
     def getId(self):
         global conn
@@ -159,11 +159,17 @@ class Users(object):
         return self._connectsTo
 
     def setConnectsTo(self, connection):
-        self._connectsTo[self.getUsername()][connection[0]] = connection[1]
+        print(connection)
+        if self._connectsTo == []:
+            self._connectsTo.append(connection)
+        elif self._connectsTo[0] < self._connectsTo[len(self._connectsTo)-1]:
+            self._connectsTo.append(connection)
+        else:
+            self._connectsTo.insert(0, connection)
 
-    def sortConnections(self):
-        #sorts users followings based on least to most similar users (range from 0 <= x <= 2pi - where x is the cosine similarity between two users)
-        self._connectsTo[self.getUsername()] = sorted(self._connectsTo[self.getUsername()], key=self._connectsTo[self.getUsername()].get)
+##    def sortConnections(self):
+##        #sorts users followings based on least to most similar users (range from 0 <= x <= 2pi - where x is the cosine similarity between two users)
+##        self._connectsTo[self.getUsername()] = sorted(self._connectsTo[self.getUsername()], reverse=True key=self._connectsTo[self.getUsername()])
         
     def rate_titles(self, title):
         #show ratings window
@@ -226,7 +232,7 @@ class Users(object):
         conn.commit()
         for row in followings_query:
             if row not in self.getFollowings():
-                self._followers.append(row[0])
+                self._followings.append(row[0])
                 #updates user similarity with their followings
                 system.updateUsersSimilarity(self, row[0])
 
@@ -556,6 +562,9 @@ class RecommenderSystem():
                     conn.commit()
                 c.close()
 
+        if user.getFollowings() != []:
+            self.integrateRecommendations(user)
+
     #user1 - object, user2 - string (username)
     def setUpVectors(self, user1, user2):
         global conn
@@ -659,7 +668,104 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
 
         #sorts adjacency list by cosine similarity value to prioritise user's following by who is most similar
 
-        user1.sortConnections()
+##        user1.sortConnections()
+
+    def commitIntegrations(self, user, user2):
+        global conn
+
+        c = conn.cursor()
+        #gets current user's following's id to query other tables in the database
+        user2Id_query = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        conn.commit()
+        for row in user2Id_query:
+            user2Id = row[0]
+
+        #gets both user's current following's rated title and unseen titles
+        user2_unseenTitles_query = c.execute('''SELECT imdbId, predictedRating FROM unseenTitles WHERE userId = '{}';'''.format(user2Id))
+        conn.commit()
+        user2_ratedTitles_query = c.execute('''SELECT imdbId, rating FROM usersRatedTitles WHERE userID = '{}';'''.format(user2Id))
+        conn.commit()
+        
+
+        user2_unseenTitles = []
+
+        titlesTemplate = {"title": None, "predictedRating": None}
+        for row in user2_unseenTitles_query:
+            titlesTemplate["title"] = row[0]
+            titlesTemplate["predictedRating"] = row[1]
+            user2_unseenTitles.append(titlesTemplate)
+            titlesTemplate = {"title": None, "predictedRating": None}
+
+        user2_ratedTitles = []
+
+        titlesTemplate = {"title": None, "rating": None}
+        for row in user2_ratedTitles_query:
+            titlesTemplate["title"] = row[0]
+            titlesTemplate["rating"] = row[1]
+            user2_ratedTitles.append(titlesTemplate)
+            titlesTemplate = {"title": None, "rating": None}
+
+        c.close()
+            
+        c = conn.cursor()
+
+        #obtain cosine similarity between the two users
+        users_similarity_query = c.execute('''SELECT cosineSimilarity FROM userFollowings WHERE userId = '{}' AND user_follows = '{}';'''.format(user.getId(), user2Id))
+
+        for row in users_similarity_query:
+            users_similarity = row[0]
+        conn.commit()           
+        user_titles_queryRated = c.execute('''SELECT imdbId FROM usersRatedTitles  WHERE userId = '{}';'''.format(user.getId()))
+        user_titles_queryRecommended = c.execute('''SELECT imdbId FROM recommendations WHERE userId = '{}';'''.format(user.getId()))
+        conn.commit()
+        
+
+        users_titles = []
+        for row in user_titles_queryRated:
+            users_titles.append(row[0])
+
+        for row in user_titles_queryRecommended:
+            users_titles.append(row[0])
+
+        c.close()
+        
+        c = conn.cursor()
+        for title in user2_unseenTitles:
+            if title["title"] not in users_titles:
+                title["predictedRating"] = (users_similarity/(2*math.pi)) * title["predictedRating"]
+                print(title["predictedRating"])
+                if title["predictedRating"] >= 2.5:
+                    c.execute('''INSERT INTO recommendations (userId, imdbId) VALUES ('{}', '{}');'''.format(user.getId(), title["title"]))
+                    conn.commit()
+
+        for title in user2_ratedTitles:
+            if title["title"] not in users_titles:
+                title["rating"] = (users_similarity/(2*math.pi)) * title["rating"]
+                print(title["rating"])
+                if title["rating"] >= 3:
+                    c.execute('''INSERT INTO recommendations (userId, imdbId) VALUES ('{}', '{}');'''.format(user.getId(), title["title"]))
+                    conn.commit()
+
+        c.close()
+        
+    def integrateRecommendations(self, user):
+        #only integrate the user's top five most similar followers (given that the user is following more than five followers
+        #consider expanding as the system expands (post-developments)
+
+        for i in range(0,len(user.getFollowings())):
+            self.updateUsersSimilarity(user, user.getFollowings()[i])
+            
+        if len(user.getFollowings()) > 5:
+            for i in range(0,5):
+                self.commitIntegrations(user, user.getFollowings()[i])
+        else:
+            #otherwise, integrates all of user's followings
+            for i in range(0,len(user.getFollowings())):
+                self.commitIntegrations(user, user.getFollowings()[i])
+                
+                           
+                            
+                
 
     def addToUnseenQueue(self, user, title, window, rateCapacity):
         global conn, rateTracker
@@ -727,7 +833,7 @@ def refreshWindow(window, user, rateCapacity):
 
     system.getUnseenQueue().heapSort(user)
 
-    if rateTracker >= int(rateCapacity):
+    if rateTracker >= int(rateCapacity) or system.getUnseenQueue().isEmpty() == True:
         #Recommendations loaded to database
         system.generateRecommendations(user)
     else:    
@@ -911,7 +1017,8 @@ def togglePosition(position, recommendationsWindow, recommendations):
     clickBackward = PushButton(recommendationsWindow, text="Back", command=lambda:goBackward(position, recommendationsWindow, recommendation, recommendationImage, recommendations), align="left")
 
 def ShowRecommendationsWindow(window, user):
-    global conn
+    global conn, system
+    system.integrateRecommendations(user)
     recommendationsWindow = Window(window, title="Recommendations", height=700, width=500)
 
     recommendations = []
