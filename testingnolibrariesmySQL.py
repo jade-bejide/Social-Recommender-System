@@ -24,7 +24,10 @@ systemdb = mysql.connector.connect(
     database="sql11399413"
 )
 
-c = systemdb.cursor()
+c = systemdb.cursor(buffered=True)
+c.execute("SELECT * from users;")
+users = c.fetchall()
+print(users)
 
 #Load in titles
 
@@ -84,10 +87,11 @@ def convertIdToTitleObject(titleId):
 
 def setUpUnseenTitles(user):
     global imdbIDs, systemdb
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
 
     #checks whether the user has rated titles before
-    unseenTitles_query = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
+    c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
+    systemdb.commit()
     unseenTitles_query = c.fetchall()
     unseenTitles = []
     for row in unseenTitles_query:
@@ -123,10 +127,10 @@ class Users(object):
     def getId(self):
         global systemdb
 
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #gets the user's id from the database, this is useful to quickly query other tables in the database as appropriate
-        userIdQuery = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(self.getUsername()))
-
+        c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(self.getUsername()))
+        systemdb.commit()
         rows = c.fetchall()
 
         userId = rows[0][0]    
@@ -152,11 +156,12 @@ class Users(object):
     def createGenreScoresExternal(self):
         #gets genre scores from database
         global systemdb
-        c= systemdb.cursor()
+        c= systemdb.cursor(buffered=True)
         #creates the template for the genre scores
         template = {"genre": None, "averageRating": None, "timesRated": None}
         #queries user's genre rating data
-        genreScores_query = c.execute('''SELECT genre, averageRating, timesRated FROM ratingsMatrix WHERE userId = '{}';'''.format(self.getId()))
+        c.execute('''SELECT genre, averageRating, timesRated FROM ratingsMatrix WHERE userId = '{}';'''.format(self.getId()))
+        systemdb.commit()
         genreScores_query = c.fetchall()
         
         for row in genreScores_query:
@@ -204,14 +209,16 @@ class Users(object):
     def followUser(self, user):
         global systemdb, system
         #updates selected user's followers
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #gets user to follow's id
-        userToFollow_id = c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user))
+        c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user))
+        systemdb.commit()
         userToFollow_id = c.fetchall()
         for row in userToFollow_id:
             userToFollow_id = row[0]
 
-        followingsQuery = c.execute('''SELECT * from userFollowings WHERE userId = '{}';'''.format(self.getId()))
+        c.execute('''SELECT * from userFollowings WHERE userId = '{}';'''.format(self.getId()))
+        systemdb.commit()
         followingsQuery = c.fetchall()
         followers = []
         for row in followingsQuery:
@@ -219,8 +226,10 @@ class Users(object):
         if userToFollow_id not in followers:
             #inserts user into followings
             c.execute('''INSERT INTO userFollowings(userId, user_follows) VALUES ('{}', '{}');'''.format(self.getId(), userToFollow_id))
+            systemdb.commit()
             #updates user to follow's followers
             c.execute('''INSERT INTO userFollowers(userId, user_followedBy) VALUES ('{}', '{}');'''.format(userToFollow_id, self.getId()))
+            systemdb.commit()
         else:
             pass
             #the user already follows that user
@@ -233,24 +242,28 @@ class Users(object):
         if user in self._followings:
             self._followings.remove(user)
 
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #gets user to unfollow's id
-        userToUnfollow_id = c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user))
+        c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user))
+        systemdb.commit()
         userToUnfollow_id = c.fetchall()
         for row in userToUnfollow_id:
             userToUnfollow_id = row[0]
 
         #removes records from both the userFollowers and userFollowings tables in the database
         c.execute('''DELETE FROM userFollowings WHERE userId ='{}' AND user_follows='{}';'''.format(self.getId(), userToUnfollow_id))
+        systemdb.commit()
         c.execute('''DELETE FROM userFollowers WHERE userId='{}' AND user_followedBy='{}';'''.format(userToUnfollow_id, self.getId()))
+        systemdb.commit()
 
         c.close()
 
     #gets followings from external database to be copied into the user's followings attribute when the user logs into a new session
     def updateFollowings(self):
         global systemdb, system
-        c = systemdb.cursor()
-        followings_query = c.execute('''SELECT users.username FROM users JOIN userFollowings WHERE users.userId=userFollowings.user_follows AND userFollowings.userId = '{}';'''.format(self.getId()))
+        c = systemdb.cursor(buffered=True)
+        c.execute('''SELECT users.username FROM users JOIN userFollowings WHERE users.userId=userFollowings.user_follows AND userFollowings.userId = '{}';'''.format(self.getId()))
+        systemdb.commit()
         followings_query = c.fetchall()
         for row in followings_query:
             if row not in self.getFollowings():
@@ -281,9 +294,10 @@ class Users(object):
         self._recommendations.append(title)
 
         #saves recommendations externally
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
 
-        unseenTitlesCheck = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId = '{}';'''.format(self.getId()))
+        c.execute('''SELECT imdbId FROM unseenTitles WHERE userId = '{}';'''.format(self.getId()))
+        systemdb.commit()
         unseenTitlesCheck = c.fetchall()
 
         #checks if the title is already in the database
@@ -294,11 +308,14 @@ class Users(object):
         if title.getId() in idCheck:
             #updates unseen titles to include new values if so
             c.execute('''UPDATE unseenTitles SET predictedRating = '{}' AND recommended = TRUE WHERE imdbId = '{}' and userId = '{}';'''.format(predictedRating, title.getId(), self.getId()))
+            systemdb.commit()
         else:
             #otherwise adds the record entry into the database
             c.execute('''INSERT INTO unseenTitles (userId, imdbId, predictedRating, recommended) VALUES ('{}', '{}', '{}', TRUE);'''.format(self.getId(), title.getId(), predictedRating))
+            systemdb.commit()
 
         c.execute('''INSERT INTO recommendations (userId, imdbId) VALUES ('{}', '{}');'''.format(self.getId(), title.getId()))
+        systemdb.commit()
         c.close()
 
         #calculates cosine similarity between user and their followings
@@ -339,19 +356,22 @@ class Title(object):
 
     def setRating(self, user, userRating):
         global systemdb
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #saves rated title into database
         c.execute('''INSERT INTO usersRatedTitles (userId, imdbId, rating) VALUES ('{}', '{}', '{}');'''.format(user.getId(), self.getId(), userRating))
+        systemdb.commit()
         #when the title has been rated by the user, it is removed from the unseenTitles table in the database,
         #so that when the titles are next loaded into the system, the user does not rerate titles
         c.execute('''DELETE FROM unseenTitles where imdbId = '{}' AND userID = '{}';'''.format(self.getId(), user.getId()))
+        systemdb.commit()
         c.close()
 
     def getRating(self, user):
         global systemdb
         #gets users rating of a title from the external database
-        c = systemdb.cursor()
-        ratingQuery = c.execute('''SELECT rating FROM usersRatedTitles WHERE imdbId = '{}' AND userId = '{}';'''.format(self.getId(), user.getId()))
+        c = systemdb.cursor(buffered=True)
+        c.execute('''SELECT rating FROM usersRatedTitles WHERE imdbId = '{}' AND userId = '{}';'''.format(self.getId(), user.getId()))
+        systemdb.commit()
         rows = c.fetchall()
         rating = rows[0][0]
         c.close()
@@ -533,9 +553,10 @@ class RecommenderSystem():
         for following in user.getFollowings():
             self.updateUsersSimilarity(user, following)
 
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
 
-        ratedGenres_query = c.execute('''SELECT genre FROM ratingsMatrix WHERE userId = '{}';'''.format(user.getId()))
+        c.execute('''SELECT genre FROM ratingsMatrix WHERE userId = '{}';'''.format(user.getId()))
+        systemdb.commit()
         ratedGenres_query = c.fetchall()
         ratedGenres = []
         for row in ratedGenres_query:
@@ -546,10 +567,12 @@ class RecommenderSystem():
             user.getGenreScores()[i]["averageRating"] = user.getGenreScores()[i]["averageRating"] / user.getGenreScores()[i]["timesRated"]
             if user.getGenreScores()[i]["genre"] in ratedGenres:
                 c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[i]["averageRating"], 2), user.getId(), user.getGenreScores()[i]["genre"]))
+                systemdb.commit()
                 c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[i]["timesRated"], user.getId(), user.getGenreScores()[i]["genre"]))
+                systemdb.commit()
             else:
                 c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), user.getGenreScores()[i]["genre"], user.getGenreScores()[i]["averageRating"], user.getGenreScores()[i]["timesRated"]))
-
+                systemdb.commit()
         c.close()
             
 
@@ -569,8 +592,9 @@ class RecommenderSystem():
             else:
                 #27/02/21 - WISHLIST: REMOVE TITLE FROM RECOMMENDATION IF THE UPDATED PREDICTED RATING IS NOW LESS THAN THREE
                 #If the title will not be recommended to the user
-                c = systemdb.cursor()
-                unseenTitlesCheck = c.execute('''SELECT imdbId FROM unseenTitles WHERE userID = '{}';'''.format(user.getId()))
+                c = systemdb.cursor(buffered=True)
+                c.execute('''SELECT imdbId FROM unseenTitles WHERE userID = '{}';'''.format(user.getId()))
+                systemdb.commit()
                 unseenTitlesCheck = c.fetchall()
                 idCheck = []
                 #Checks the there is no record entry for that title id already in the database (to avoid data redundancies)
@@ -579,8 +603,10 @@ class RecommenderSystem():
 
                 if title.getId() in idCheck:
                     c.execute('''UPDATE unseenTitles SET predictedRating = '{}' WHERE imdbId = '{}' AND userId = '{}';'''.format(predictedRating, title.getId(), user.getId()))
+                    systemdb.commit()
                 else:
                     c.execute('''INSERT INTO unseenTitles (userId, imdbId, predictedRating, recommended) VALUES ('{}', '{}', '{}', FALSE)'''.format(user.getId(), title.getId(), predictedRating))
+                    systemdb.commit()
                 c.close()
 
         if user.getFollowings() != []:
@@ -591,15 +617,16 @@ class RecommenderSystem():
         global systemdb
         values_user1 = []
         values_user2 = []
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #gets user2's id directly from database
-        user2Id_query = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        systemdb.commit()
         user2Id_query = c.fetchall()
         for row in user2Id_query:
             user2Id = row[0]
         #saves list of user2's rated genres
-        user2_ratedGenres_query = c.execute('''SELECT genre FROM ratingsMatrix
-WHERE userId = '{}';'''.format(user2Id))
+        c.execute('''SELECT genre FROM ratingsMatrix WHERE userId = '{}';'''.format(user2Id))
+        systemdb.commit()
         user2_ratedGenres_query = c.fetchall()
         user2_ratedGenres = []
         for row in user2_ratedGenres_query:
@@ -608,7 +635,7 @@ WHERE userId = '{}';'''.format(user2Id))
         c.close()
         #prevents database locking from too many queries -
         #this will hopefully not be needed as much when switching to a multiuser remote SQL database
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
 
         #creates 2 1xn (where n is the number of genres rated by user1) for user1 and user 2 -
         #the user's following, with the elements being the average
@@ -617,8 +644,9 @@ WHERE userId = '{}';'''.format(user2Id))
         for i in range(0, len(user1.getGenreScoresExternal())):
             values_user1.append([user1.getGenreScoresExternal()[i]["averageRating"]])
             if user1.getGenreScoresExternal()[i]["genre"] in user2_ratedGenres:
-                genreRating_query = c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
+                c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
 genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
+                systemdb.commit()
                 genreRating_query = c.fetchall()
                 for row in genreRating_query:
                     genreRating = row[0]
@@ -669,14 +697,16 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
             #the values should lie between 0 and 2pi (2pi is approximately 6.283185307) - result is in radians
             cosineSimilarity = math.acos(dotProduct / (user1Vector_magnitude * user2Vector_magnitude))
 
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #gets user2's id directly from database
-        user2Id_query = c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        c.execute('''SELECT userId FROM users WHERE username = '{}';'''.format(user2))
+        systemdb.commit()
         user2Id_query = c.fetchall()
         for row in user2Id_query:
             user2Id = row[0]
         cosineSimilarity = round(cosineSimilarity, 3)
         c.execute('''UPDATE userFollowings SET cosineSimilarity = '{}' where userId = '{}' and user_follows = '{}';'''.format(cosineSimilarity, user1.getId(), user2Id))
+        systemdb.commit()
         c.close()
 
         return cosineSimilarity
@@ -693,19 +723,21 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
     def integrateRecommendations(self, user):
         global systemdb
 
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         print(user.getConnections())
 
-        unseen_titles_query = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId = '{}';'''.format(user.getId()))
+        c.execute('''SELECT imdbId FROM unseenTitles WHERE userId = '{}';'''.format(user.getId()))
+        systemdb.commit()
         unseen_titles_query = c.fetchall()
                
         template = {"title": None, "predictedRating": 0}
-        for row in unseen_titles_query.fetchall():
+        for row in unseen_titles_query:
             template["title"] = row[0]
             
             #if rated, gets followings rating of titles that the user is yet to rate
-            ratings_query = c.execute('''SELECT usersRatedTitles.rating FROM usersRatedTitles JOIN userFollowings WHERE userFollowings.user_follows=usersRatedTitles.userId
+            c.execute('''SELECT usersRatedTitles.rating FROM usersRatedTitles JOIN userFollowings WHERE userFollowings.user_follows=usersRatedTitles.userId
         AND usersRatedTitles.imdbId = '{}' AND userFollowings.userId = '{}';'''.format(row[0], user.getId()))
+            systemdb.commit()
 
             ratings_query = c.fetchall()
             
@@ -846,9 +878,10 @@ def initialiseRatingsWindow(window, user, rateCapacity):
     
 def logOffUser(user, window):
     global systemdb
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
     #informs the external database that the user has now logged off
     c.execute('''UPDATE users SET loggedIn = 0 WHERE username = "{}"'''.format(user.getUsername()))
+    systemdb.commit()
     c.close()
     window.destroy()
 
@@ -857,11 +890,12 @@ def viewFollowers(user, window):
 
     followersWindow = Window(window, title=user.getUsername() + "'s followers")
     #grabs users followers from SQL database
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
     followers = []
     
-    followersQuery = c.execute('''SELECT userFollowers.user_followedBy, users.username FROM
+    c.execute('''SELECT userFollowers.user_followedBy, users.username FROM
 userFollowers JOIN users WHERE userFollowers.user_followedBy=users.userId AND userFollowers.userId = '{}';'''.format(user.getId()))
+    systemdb.commit()
 
     followingsQuery = c.fetchall()
     for row in followersQuery:
@@ -877,11 +911,12 @@ def viewFollowings(user, window):
 
     followingsWindow = Window(window, title=user.getUsername() + "'s followings")
     #grabs users followers from SQL database
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
     followings = []
 
-    followingsQuery = c.execute('''SELECT userFollowings.user_follows, users.username FROM
+    c.execute('''SELECT userFollowings.user_follows, users.username FROM
 userFollowings JOIN users WHERE userFollowings.user_follows=users.userId AND userFollowings.userId='{}';'''.format(user.getId()))
+    systemdb.commit()
     followingsQuery = c.fetchall()
     for row in followingsQuery:
         user.getFollowings().append(row[1])
@@ -895,8 +930,9 @@ def searchUser(window, user, searchValue):
     global systemdb
     #allows the user to search for other users on the database
     #12/03/21 - Wishlist - update this so that only one list box is present every time the user presses the 'search' button
-    c = systemdb.cursor()
-    searchQuery = c.execute('''SELECT * FROM users WHERE username LIKE '%{}%';'''.format(searchValue))
+    c = systemdb.cursor(buffered=True)
+    c.execute('''SELECT * FROM users WHERE username LIKE '%{}%';'''.format(searchValue))
+    systemdb.commit()
     searchQuery = c.fetchall()
     users = []
     for row in searchQuery:
@@ -983,9 +1019,10 @@ def ShowRecommendationsWindow(window, user):
 
     recommendations = []
 
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
     #Grabs all imdb ids from unseenTitles table in database
-    recommendationsQuery = c.execute('''SELECT imdbId FROM recommendations WHERE userId = '{}';'''.format(user.getId()))
+    c.execute('''SELECT imdbId FROM recommendations WHERE userId = '{}';'''.format(user.getId()))
+    systemdb.commit()
     recommendationsQuery = c.fetchall()
     for row in recommendationsQuery:
         title = row[0]
@@ -1113,8 +1150,9 @@ def createAccount(username, password, authenticate, window):
     #creates an account for a new user, instatiating an object for the user's current log in session as well as recording
     #their details in the external database
     global systemdb, Users
-    c = systemdb.cursor()
-    usernames = c.execute('''SELECT username FROM users;''')
+    c = systemdb.cursor(buffered=True)
+    c.execute('''SELECT username FROM users;''')
+    systemdb.commit()
     usernames = c.fetchall()
     usernames_list = []
     for row in usernames:
@@ -1125,8 +1163,9 @@ def createAccount(username, password, authenticate, window):
         if validateUsername(username, window) == True and validatePassword(password, authenticate, window) == True:
             passwordHashed = hashPassword(password)
             #user = Users(username, passwordHashed)
-            c = systemdb.cursor()
+            c = systemdb.cursor(buffered=True)
             c.execute('''INSERT INTO users (username, password, loggedIn) VALUES('{}', '{}', TRUE);'''.format(username, passwordHashed))
+            systemdb.commit()
             c.close()
             user = Users(username, passwordHashed)
             ShowHomePageWindow(user, window.master)
@@ -1190,13 +1229,17 @@ def validatePassword(password, passwordAgain, window):
 
 def authenticateUser(username, password, window):
     global systemdb, Users
-    c = systemdb.cursor()
-    usernames = c.execute('''SELECT username FROM users;''')
+    c = systemdb.cursor(buffered=True)
+    c.execute('''SELECT username FROM users;''')
+    systemdb.commit()
     
     usernames_list = []
-    c.fetchall()
-    for row in c:
+    usernames = c.fetchall()
+    for row in usernames:
+        
         usernames_list.append(row[0])
+
+    print(usernames_list)
 
     c.close()
 
@@ -1205,10 +1248,11 @@ def authenticateUser(username, password, window):
         ShowNoSuchUserWindow(window)
         return False
 
-    c = systemdb.cursor()
+    c = systemdb.cursor(buffered=True)
     c.execute('''SELECT password FROM users WHERE username=username;''')
-    c.fetchall()
-    for row in c:
+    systemdb.commit()
+    passwordMatch_query = c.fetchall()
+    for row in passwordMatch_query:
         passwordMatch = row[0]
 
     c.close()
@@ -1220,9 +1264,10 @@ def authenticateUser(username, password, window):
         ShowIncorrectDetailsWindow(window)
     else:
         user = Users(username, password)
-        c = systemdb.cursor()
+        c = systemdb.cursor(buffered=True)
         #notifies the program that the user has logged into the system
         c.execute('''UPDATE users SET loggedIn = 1 WHERE username = '{}';'''.format(user.getUsername()))
+        systemdb.commit()
         c.close()
 
         ShowHomePageWindow(user, window.master)
