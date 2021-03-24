@@ -37,7 +37,9 @@ imdbIDs = ['0805647', '0468569', '0167260', '0120737', '0133093', '0245429', '01
            '0110912','0108052','0097576','8579674','1950186','8613070','6966692', '1392190','2267998','0986264','0457430',
            '0434409','0096283','0088247','0086190','0083658','0080678', '4786824','8134470','0460681',
            '7569576','11794642','0413573','1190634','0944947','5171438','2442560','1520211','1844624','0386676',
-           '10048342','8111088','0903747','0108778','0364845','4574334']
+           '10048342','8111088','0903747','0108778','0364845','4574334', '12361974', '9140560',  '9208876',  '5109280',
+           '0770828',  '2948372', '9620292', '9770150', '6723592', '9698442', '0451279', '5363618', '0094898',
+           '2395427', '9784798', '0068646', '12920838', '0448115', '1345836', '10288566', '6802400', '10813940']
 
 def getUser2Id(user2):
     global systemdb
@@ -97,18 +99,14 @@ def setUpUnseenTitles(user):
     c = systemdb.cursor(buffered=True)
 
     #checks whether the user has rated titles before
-    c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
-    systemdb.commit()
-    unseenTitles_query = c.fetchall()
-    unseenTitles = []
-    for row in unseenTitles_query:
-        unseenTitles.append(row[0])
-
+    unseenTitles = getUnseenTitles(user)
+    
     #if the user has rated titles before, the program loads in titles the user hasn't rated
     if unseenTitles != []:
         createTitleObjects(unseenTitles)
     else:
         #else it loads in all tiles
+        random.shuffle(imdbIDs)
         createTitleObjects(imdbIDs)
 
     c.close()
@@ -750,7 +748,7 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
         temp = window.master
         window.destroy()
 
-        if system.getRatingTracking >= int(rateCapacity):
+        if system.getRatingTracking() >= int(rateCapacity):
             #generates recommendations automatically when needed
             system.generateRecommendations(user)
         else:
@@ -986,7 +984,9 @@ def togglePosition(position, recommendationsWindow, recommendations):
 
 def ShowRecommendationsWindow(window, user):
     global systemdb, system
-    system.integrateRecommendations(user)
+
+    if len(user.getFollowings()) > 0:
+        system.integrateRecommendations(user)
     recommendationsWindow = Window(window, title="Recommendations", height=700, width=500)
 
     recommendations = []
@@ -997,7 +997,7 @@ def ShowRecommendationsWindow(window, user):
     systemdb.commit()
     recommendationsQuery = c.fetchall()
     for row in recommendationsQuery:
-        titleobject = convertIdToObject(row[0])
+        titleobject = convertIdToTitleObject(row[0])
         recommendations.append(titleobject)
 
     #if there are no recommendations, the window displays a 'rate more titles' message - prevents program crashing
