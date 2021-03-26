@@ -24,7 +24,7 @@ To be appended
 
 ## Technologies
 * Python
-* SQLite
+* MySQL
 
 ### Notable Third Party Modules 
 * OMDb (Open Movie Database) API: http://www.omdbapi.com/
