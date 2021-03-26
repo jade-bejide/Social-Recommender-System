@@ -41,6 +41,34 @@ imdbIDs = ['0805647', '0468569', '0167260', '0120737', '0133093', '0245429', '01
            '0770828',  '2948372', '9620292', '9770150', '6723592', '9698442', '0451279', '5363618', '0094898',
            '2395427', '9784798', '0068646', '12920838', '0448115', '1345836', '10288566', '6802400', '10813940']
 
+#enables quick checking of updation of each window's state
+windows = {
+    'newUserWindow': 0,
+    'existingUserWindow': 0,
+    'ratingWindow': 0,
+    'recommendationsWindow': 0,
+    'profileWindow': 0,
+    'followersWindow': 0,
+    'followingsWindow': 0,
+    'searchEngineWindow': 0}
+
+def isWindowOpen(window):
+    global windows
+    
+    if windows[window] == 1:
+        #window is already open and therefore won't open another window
+        return True
+    else:
+        #if not, the program will open the window, so this state is updated here
+        windows[window] = 1
+        return False
+
+def closeWindow(windowname, windowobj):
+    #informs the windows dictionary that the window
+    #has been closed
+    windows[windowname] = 0
+    windowobj.destroy()
+
 def getUser2Id(user2):
     global systemdb
     c = systemdb.cursor(buffered=True)
@@ -546,6 +574,8 @@ class RecommenderSystem():
     def generateRecommendations(self, user):
         global systemdb
 
+
+
         #updates cosine similarity between user and their followings
         for following in user.getFollowings():
             self.updateUsersSimilarity(user, following)
@@ -749,6 +779,8 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
         window.destroy()
 
         if system.getRatingTracking() >= int(rateCapacity):
+            #rating session is complete so the system resets its rating tracker
+            system.resetRateTracker()
             #generates recommendations automatically when needed
             system.generateRecommendations(user)
         else:
@@ -757,9 +789,9 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
         
 
     def saveRating(self, user, title, rating, window, rateCapacity):
-        global rateTracker
-
-        rateTracker += 1
+        global system
+        
+        system.incrementRateTracker()
         #Saves user rating to the database
         title.setRating(user, rating)
 
@@ -795,11 +827,13 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
 
     
 def refreshWindow(window, user, rateCapacity):
-    global system, rateTracker
+    global system
 
     system.getUnseenQueue().heapSort(user)
 
-    if rateTracker >= int(rateCapacity) or system.getUnseenQueue().isEmpty() == True:
+    if system.getRatingTracking() >= int(rateCapacity) or system.getUnseenQueue().isEmpty() == True:
+        #rating session is complete so the system resets its rating tracker
+        system.resetRateTracker()
         #Recommendations loaded to database
         system.generateRecommendations(user)
     else:    
@@ -833,19 +867,13 @@ def showRatingsWindow(window, user, rateCapacity):
     unseenTitle_btn = PushButton(rateBox, text="Skip", command = lambda:system.addToUnseenQueue(user, title, ratingWindow, rateCapacity))
    
 def initialiseRatingsWindow(window, user, rateCapacity):
-    global system, rateTracker
+    global system
 
-    rateTracker = 0
-
-    if rateTracker <= int(rateCapacity):
+    if isWindowOpen('ratingWindow') == True:
+        #window is already open
+        pass
+    else:
         showRatingsWindow(window, user, rateCapacity)
-    elif rateTracker > int(rateCapacity):
-        system.generateRecommendations(user)
-
-    #change to be more OOP friendly later
-
-    #assumes those titles have already been rated
-    numRatings = 0
 
     
 def logOffUser(user, window):
@@ -860,43 +888,55 @@ def logOffUser(user, window):
 def viewFollowers(user, window):
     global systemdb
 
-    followersWindow = Window(window, title=user.getUsername() + "'s followers")
-    #grabs users followers from SQL database
-    c = systemdb.cursor(buffered=True)
-    followers = []
-    
-    c.execute('''SELECT userFollowers.user_followedBy, users.username FROM
-userFollowers JOIN users WHERE userFollowers.user_followedBy=users.userId AND userFollowers.userId = '{}';'''.format(user.getId()))
-    systemdb.commit()
+    #checks if the followers window is already open
+    if isWindowOpen('followersWindow') == True:
+        pass
+    else:
+        followersWindow = Window(window, title=user.getUsername() + "'s followers")
+        followersWindow.when_closed = lambda:closeWindow('followersWindow', followersWindow)
+        #grabs users followers from SQL database
+        c = systemdb.cursor(buffered=True)
+        followers = []
+        
+        c.execute('''SELECT userFollowers.user_followedBy, users.username FROM
+    userFollowers JOIN users WHERE userFollowers.user_followedBy=users.userId AND userFollowers.userId = '{}';'''.format(user.getId()))
+        systemdb.commit()
 
-    followingsQuery = c.fetchall()
-    for row in followersQuery:
-        user.getFollowers().append(row[1])
+        followingsQuery = c.fetchall()
+        for row in followersQuery:
+            user.getFollowers().append(row[1])
 
-    c.close()
+        c.close()
 
-    txt_followers = Text(followersWindow, text="Your Followers")
-    followersList = ListBox(followersWindow, items=user.getFollowers())
+        txt_followers = Text(followersWindow, text="Your Followers")
+        followersList = ListBox(followersWindow, items=user.getFollowers())
 
 def viewFollowings(user, window):
     global systemdb
 
-    followingsWindow = Window(window, title=user.getUsername() + "'s followings")
-    #grabs users followers from SQL database
-    c = systemdb.cursor(buffered=True)
-    followings = []
 
-    c.execute('''SELECT userFollowings.user_follows, users.username FROM
-userFollowings JOIN users WHERE userFollowings.user_follows=users.userId AND userFollowings.userId='{}';'''.format(user.getId()))
-    systemdb.commit()
-    followingsQuery = c.fetchall()
-    for row in followingsQuery:
-        user.getFollowings().append(row[1])
+    #checks if the followings window is already open
+    if isWindowOpen('followingsWindow') == True:
+        pass
+    else:
+        followingsWindow = Window(window, title=user.getUsername() + "'s followings")
+        followings.when_closed = lambda:closeWindow('followingsWindow', followingsWindow)
+        
+        #grabs users followers from SQL database
+        c = systemdb.cursor(buffered=True)
+        followings = []
 
-    c.close()
+        c.execute('''SELECT userFollowings.user_follows, users.username FROM
+    userFollowings JOIN users WHERE userFollowings.user_follows=users.userId AND userFollowings.userId='{}';'''.format(user.getId()))
+        systemdb.commit()
+        followingsQuery = c.fetchall()
+        for row in followingsQuery:
+            user.getFollowings().append(row[1])
 
-    txt_followings = Text(followingsWindow, text="Who You Follow")
-    followersList = ListBox(followingsWindow, items=user.getFollowings())
+        c.close()
+
+        txt_followings = Text(followingsWindow, text="Who You Follow")
+        followersList = ListBox(followingsWindow, items=user.getFollowings())
 
 def searchUser(window, user, searchValue):
     global systemdb
@@ -915,26 +955,37 @@ def searchUser(window, user, searchValue):
     
 def openSearchEngine(user, window):
     global systemdb
+    #checks if the window is already open
+    if isWindowOpen('searchEngineWindow') == True:
+        pass
+    else:
+        searchEngineWindow = Window(window, title="Follow/Unfollow a User")
+        searchEngineWindow.when_closed = lambda:closeWindow('searchEngineWindow', searchEngineWindow)
+    
+        #sets up environment to search for users
 
-    searchEngine = Window(window, title="Follow/Unfollow a User")
-    #sets up environment to search for users
-
-    lbl_followUser = Text(searchEngine, text="Search for a user: ")
-    userToFollow = TextBox(searchEngine)
-    search_btn = PushButton(searchEngine, text="Search", command=lambda:searchUser(searchEngine, user, userToFollow.value))
+        lbl_followUser = Text(searchEngine, text="Search for a user: ")
+        userToFollow = TextBox(searchEngine)
+        search_btn = PushButton(searchEngine, text="Search", command=lambda:searchUser(searchEngine, user, userToFollow.value))
 
 def ShowProfileWindow(window, user):
     global systemdb
     #queries database to log all of users followings to the system
+
+    if isWindowOpen('profileWindow') == True:
+        pass
+    else:
+        profileWindow = Window(window, title=user.getUsername() + "'s Profile")
+        profileWindow.when_closed = lambda:closeWindow('profileWindow', profileWindow)
     
-    profileWindow = Window(window, title=user.getUsername() + "'s Profile")
-    txt_username = Text(profileWindow, text=user.getUsername())
+    
+        txt_username = Text(profileWindow, text=user.getUsername())
 
-    buttonsBox = Box(profileWindow)
-    btn_followers = PushButton(buttonsBox, text="Followers", command=lambda:viewFollowers(user, profileWindow), align="left")
-    btn_followings = PushButton(buttonsBox, text="Followings", command=lambda:viewFollowings(user, profileWindow), align="right")
+        buttonsBox = Box(profileWindow)
+        btn_followers = PushButton(buttonsBox, text="Followers", command=lambda:viewFollowers(user, profileWindow), align="left")
+        btn_followings = PushButton(buttonsBox, text="Followings", command=lambda:viewFollowings(user, profileWindow), align="right")
 
-    btn_followAUser = PushButton(buttonsBox, text="Find a User To Follow", command=lambda:openSearchEngine(user, profileWindow), align="bottom")
+        btn_followAUser = PushButton(buttonsBox, text="Find a User To Follow", command=lambda:openSearchEngine(user, profileWindow), align="bottom")
 
 def goForward(position, recommendationWindow, recommendation, recommendationImage, recommendations):
     global clickForward, clickBackward
@@ -1014,6 +1065,7 @@ def ShowHomePageWindow(user, window):
     user.updateFollowings()
     setUpUnseenTitles(user)
     app = App("Rate Movies!", height=250, width=350)
+    app.when_closed=lambda:logOffUser(user, app)
 
     welcome = Text(app, text="Welcome " + user.getUsername() + "!")
 
@@ -1027,7 +1079,6 @@ def ShowHomePageWindow(user, window):
     ratingsButton = PushButton(buttonsBox, text="Start Rating", command=lambda:initialiseRatingsWindow(app, user, setMoviesToRate.value), align="left")
     profileButton = PushButton(buttonsBox, text="See Profile", command=lambda:ShowProfileWindow(app, user), align="right")
 
-    app.when_closed(lambda:logOffUser(user, app))
     app.display()
     
 
@@ -1045,29 +1096,40 @@ def ShowLoginScreen():
 
 def ShowNewUserWindow(app):
     global Users
-    #sets up the layout for the new user window
-    newUserWindow = Window(app, title="Create an account")
-    
+    #checks if the window is already open
+    if isWindowOpen('newUserWindow') == False:
 
-    welcome_newUser = Text(newUserWindow, text="Create an account")
-    username_label = Text(newUserWindow, text="Username: ")
-    newUser_inputUsername = TextBox(newUserWindow)
-    password_label = Text(newUserWindow, text="Password: ")
-    newUser_inputPassword = TextBox(newUserWindow, hide_text=True)
-    password2_label = Text(newUserWindow, text="Enter password again: ")
-    newUser_inputPasswordAgain = TextBox(newUserWindow, hide_text=True)
-    newUser_createAccount = PushButton(newUserWindow, text="Create Account", command=lambda:createAccount(newUser_inputUsername.value, newUser_inputPassword.value, newUser_inputPasswordAgain.value, newUserWindow))
+        newUserWindow = Window(app, title="Create an account")
+        newUserWindow.when_closed = lambda:closeWindow('newUserWindow', newUserWindow)
+        #sets up the layout for the new user window
+        
+        
+
+        welcome_newUser = Text(newUserWindow, text="Create an account")
+        username_label = Text(newUserWindow, text="Username: ")
+        newUser_inputUsername = TextBox(newUserWindow)
+        password_label = Text(newUserWindow, text="Password: ")
+        newUser_inputPassword = TextBox(newUserWindow, hide_text=True)
+        password2_label = Text(newUserWindow, text="Enter password again: ")
+        newUser_inputPasswordAgain = TextBox(newUserWindow, hide_text=True)
+        newUser_createAccount = PushButton(newUserWindow, text="Create Account", command=lambda:createAccount(newUser_inputUsername.value, newUser_inputPassword.value, newUser_inputPasswordAgain.value, newUserWindow))
 
 def ShowExistingUserWindow(app):
-    #sets up the layout for the existing user window
-    existingUserWindow = Window(app, title="Login into an existing account")
+    #checks if the window is already open
+    if isWindowOpen('existingUserWindow') == True:
+        pass
+    else:
+        existingUserWindow = Window(app, title="Login into an existing account")
+        existingUserWindow.when_closed = lambda:closeWindow('existingUserWindow', existingUserWindow)
+        #sets up the layout for the existing user window
+        
 
-    welcome_existingUser = Text(existingUserWindow, text="Login to your account")
-    username_label = Text(existingUserWindow, text="Username: ")
-    existingUser_inputUsername = TextBox(existingUserWindow)
-    password_label = Text(existingUserWindow, text="Password: ")
-    existingUser_inputPassword = TextBox(existingUserWindow, hide_text=True)
-    existingUser_createAccount = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
+        welcome_existingUser = Text(existingUserWindow, text="Login to your account")
+        username_label = Text(existingUserWindow, text="Username: ")
+        existingUser_inputUsername = TextBox(existingUserWindow)
+        password_label = Text(existingUserWindow, text="Password: ")
+        existingUser_inputPassword = TextBox(existingUserWindow, hide_text=True)
+        existingUser_createAccount = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
 
 #Password and Username authentication subroutines
 def ShowInsufficientPasswordWindow(window):
@@ -1193,8 +1255,6 @@ def authenticateUser(username, password, window):
     for row in usernames:
         
         usernames_list.append(row[0])
-
-    print(usernames_list)
 
     c.close()
 
