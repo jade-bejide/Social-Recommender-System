@@ -1,6 +1,0 @@
-from guizero import *
-
-
-
-
-ShowLoginScreen()
