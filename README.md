@@ -19,6 +19,11 @@ Most people like to get movie or television show recommendations through word-of
 * You will need a personal computer/laptop that has constant Internet Access
 * You will need <a href="https://www.python.org/downloads/">Python3</a> installed
 
+### Things To Note
+
+* Due to the current limitations in accessing the IMDb database, titles are scrapped manually to the software rather than updated automatically, this means that -for now- there are a limited number of titles available to rate but this will hopefully be rectified/updated regularly in the future
+* This software is built using Python, therefore it may be slower than compiled software. Nevertheless, there is a 30 second guarantee of which, results will be loaded within 30 seconds. If they don't, feel free to report this!
+
 ### Installing the software
 
 1. Download the folder 'Instructions'
