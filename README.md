@@ -15,16 +15,25 @@ Most people like to get movie or television show recommendations through word-of
 
 ### How Can I Get Involved?
 
-* Want to be a beta tester? Contact me: jadebejide@gmail.com
+* Want to be a beta tester? Contact me: jadebejide@gmail.com to send me your feedback.
 * You will need a personal computer/laptop that has constant Internet Access
-* You will need Python installed
+* You will need <a href="https://www.python.org/downloads/">Python3</a> installed
 
-# Documentation 📃
-To be appended
+### Installing the software
+
+1. Download the folder 'Instructions'
+2. Install <a href="https://pypi.org/project/cx-Freeze/">cx-Freeze</a>
+3. Open your command line and direct to the installed folder
+4. Run 'python3 setup.py build' (This may take several seconds)
+5. Open the installed folder in File Explorer
+6. Open Build
+7. Open the folder in build (labelled 'exe.' + the platform your workstation users)
+8. Open the executable program in the file
+
 
 ## Technologies
 * Python
 * MySQL
 
 ### Notable Third Party Modules 
-* OMDb (Open Movie Database) API: http://www.omdbapi.com/
+* <a href="http://www.omdbapi.com/">OMDb (Open Movie Database) API</a> 
