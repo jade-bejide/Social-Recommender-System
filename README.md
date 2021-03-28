@@ -15,7 +15,7 @@ Most people like to get movie or television show recommendations through word-of
 
 ### How Can I Get Involved?
 
-* Want to be a beta tester? Contact me: jadebejide@gmail.com to send me your feedback.
+* Want to be a beta tester? Feel free to report any issues.
 * You will need a personal computer/laptop that has constant Internet Access
 * You will need <a href="https://www.python.org/downloads/">Python3</a> installed
 
