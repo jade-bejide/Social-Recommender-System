@@ -2,10 +2,10 @@ from cx_Freeze import setup, Executable
 
 base = None
 
-executables = [Executable("finalproject.py", base=base)]
+executables = [Executable("rate_it.py", base=base)]
 
 packages = ["idna", "guizero", "mysql.connector", "json", "urllib", "numpy",
-            "math", "requests", "random", "PIL", "sys"]
+            "math", "requests", "random", "PIL", "sys", "tkinter"]
 
 options = {
     'build_exe': {
