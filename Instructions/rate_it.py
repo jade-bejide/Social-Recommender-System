@@ -26,7 +26,6 @@ systemdb = mysql.connector.connect(
 
 c = systemdb.cursor(buffered=True)
 
-
 #Load in titles
 
 #Based on IMDb's top 250 and top rated TV shows
@@ -51,7 +50,9 @@ windows = {
     'followersWindow': 0,
     'followingsWindow': 0,
     'searchEngineWindow': 0,
-    'resultsWindow':0}
+    'resultsWindow':0,
+    'instructionsWindow':0,
+    'creditsWindow':0}
 
 def isWindowOpen(window):
     global windows
@@ -859,7 +860,7 @@ def showRatingsWindow(window, user, rateCapacity):
     #Builds the layout of the ratings window
     title = system.getUnseenQueue().dequeue()
 
-    ratingWindow = Window(window, title="Rating Movies", height=700, width=500)
+    ratingWindow = Window(window, title="Rating Movies", height=700, width=500, bg="white")
 
     rateBox = Box(ratingWindow, align="bottom")
     titleBox = Box(ratingWindow, align="top")
@@ -874,12 +875,19 @@ def showRatingsWindow(window, user, rateCapacity):
     title_image.resize(300, 446)
 
     #Remember to change these buttons to star icons at the end of primary development
-    star_1 = PushButton(rateBox, text="1", command=lambda:system.saveRating(user, title, 1, ratingWindow, rateCapacity))
-    star_2 = PushButton(rateBox, text="2", command=lambda:system.saveRating(user, title, 2, ratingWindow, rateCapacity))
-    star_3 = PushButton(rateBox, text="3", command=lambda:system.saveRating(user, title, 3, ratingWindow, rateCapacity))
-    star_4 = PushButton(rateBox, text="4", command=lambda:system.saveRating(user, title, 4, ratingWindow, rateCapacity))
-    star_5 = PushButton(rateBox, text="5", command=lambda:system.saveRating(user, title, 5, ratingWindow, rateCapacity))
+    star = "staricon.png"
+    star_1 = PushButton(rateBox, image=star, command=lambda:system.saveRating(user, title, 1, ratingWindow, rateCapacity))
+    star_2 = PushButton(rateBox, image=star, command=lambda:system.saveRating(user, title, 2, ratingWindow, rateCapacity))
+    star_3 = PushButton(rateBox, image=star, command=lambda:system.saveRating(user, title, 3, ratingWindow, rateCapacity))
+    star_4 = PushButton(rateBox, image=star, command=lambda:system.saveRating(user, title, 4, ratingWindow, rateCapacity))
+    star_5 = PushButton(rateBox, image=star, command=lambda:system.saveRating(user, title, 5, ratingWindow, rateCapacity))
     unseenTitle_btn = PushButton(rateBox, text="Skip", command = lambda:system.addToUnseenQueue(user, title, ratingWindow, rateCapacity))
+    unseenTitle_btn.bg = (28,254,251)
+    star_1.resize(30,30)
+    star_2.resize(30,30)
+    star_3.resize(30,30)
+    star_4.resize(30,30)
+    star_5.resize(30,30)
    
 def initialiseRatingsWindow(window, user, rateCapacity):
     global system
@@ -907,7 +915,7 @@ def viewFollowers(user, window):
     if isWindowOpen('followersWindow') == True:
         pass
     else:
-        followersWindow = Window(window, title=user.getUsername() + "'s followers")
+        followersWindow = Window(window, title=user.getUsername() + "'s followers", bg="white")
         followersWindow.when_closed = lambda:closeWindow('followersWindow', followersWindow)
         #grabs users followers from SQL database
         c = systemdb.cursor(buffered=True)
@@ -932,7 +940,7 @@ def viewFollowings(user, window):
     if isWindowOpen('followingsWindow') == True:
         pass
     else:
-        followingsWindow = Window(window, title=user.getUsername() + "'s followings")
+        followingsWindow = Window(window, title=user.getUsername() + "'s followings", bg="white")
         followingsWindow.when_closed = lambda:closeWindow('followingsWindow', followingsWindow)
         
         #grabs users followers from SQL database
@@ -980,12 +988,14 @@ def searchUser(window, user, searchValue):
         refreshSearchResults(usersList, users)
 
     else:
-        resultsWindow = Window(window, title="Search Results")
+        resultsWindow = Window(window, title="Search Results", bg="white")
         resultsWindow.when_closed = lambda:closeWindow('resultsWindow', resultsWindow)
         usersList = ListBox(resultsWindow, items=users)
         searchResults = 1
         btn_follow = PushButton(resultsWindow, text="Follow", command=lambda:user.followUser(usersList.value))
+        btn_follow.bg = (28,254,251)
         btn_unfollow = PushButton(resultsWindow, text="Unfollow", command=lambda:user.unfollowUser(usersList.value))
+        btn_unfollow.bg = (28,254,251)
     
 def openSearchEngine(user, window):
     global systemdb
@@ -993,7 +1003,7 @@ def openSearchEngine(user, window):
     if isWindowOpen('searchEngineWindow') == True:
         pass
     else:
-        searchEngineWindow = Window(window, title="Follow/Unfollow a User")
+        searchEngineWindow = Window(window, title="Follow/Unfollow a User", bg="white")
         searchEngineWindow.when_closed = lambda:closeWindow('searchEngineWindow', searchEngineWindow)
     
         #sets up environment to search for users
@@ -1001,6 +1011,7 @@ def openSearchEngine(user, window):
         lbl_followUser = Text(searchEngineWindow, text="Search for a user: ")
         userToFollow = TextBox(searchEngineWindow)
         search_btn = PushButton(searchEngineWindow, text="Search", command=lambda:searchUser(searchEngineWindow, user, userToFollow.value))
+        search_btn.bg = (28,254,251)
 
 def ShowProfileWindow(window, user):
     global systemdb
@@ -1009,7 +1020,7 @@ def ShowProfileWindow(window, user):
     if isWindowOpen('profileWindow') == True:
         pass
     else:
-        profileWindow = Window(window, title=user.getUsername() + "'s Profile")
+        profileWindow = Window(window, title=user.getUsername() + "'s Profile", bg="white")
         profileWindow.when_closed = lambda:closeWindow('profileWindow', profileWindow)
     
     
@@ -1017,9 +1028,11 @@ def ShowProfileWindow(window, user):
 
         buttonsBox = Box(profileWindow)
         btn_followers = PushButton(buttonsBox, text="Followers", command=lambda:viewFollowers(user, profileWindow), align="left")
+        btn_followers.bg = (28,254,251)
         btn_followings = PushButton(buttonsBox, text="Followings", command=lambda:viewFollowings(user, profileWindow), align="right")
-
+        btn_followings.bg = (28,254,251)
         btn_followAUser = PushButton(buttonsBox, text="Find a User To Follow", command=lambda:openSearchEngine(user, profileWindow), align="bottom")
+        btn_followAUser.bg = (28,254,251)
 
 def goForward(position, recommendationWindow, recommendation, recommendationImage, recommendations):
     global clickForward, clickBackward
@@ -1064,15 +1077,21 @@ def togglePosition(position, recommendationsWindow, recommendations):
     recommendationImage = Picture(recommendationsWindow, image='recommendation_coverImage.png')
     recommendationImage.resize(300, 446)
 
-    clickForward = PushButton(recommendationsWindow, text="Next", command=lambda:goForward(position, recommendationsWindow, recommendation, recommendationImage, recommendations), align="right")
-    clickBackward = PushButton(recommendationsWindow, text="Back", command=lambda:goBackward(position, recommendationsWindow, recommendation, recommendationImage, recommendations), align="left")
+    leftButton = "leftarrow.png"
+    rightButton = "rightarrow.png"
+    clickForward = PushButton(recommendationsWindow, image=rightButton, command=lambda:goForward(position, recommendationsWindow, recommendation, recommendationImage, recommendations), align="right")
+    clickForward.resize(20,20)
+    clickForward.bg = (28,254,251)
+    clickBackward = PushButton(recommendationsWindow, image=leftButton, command=lambda:goBackward(position, recommendationsWindow, recommendation, recommendationImage, recommendations), align="left")
+    clickBackward.resize(20,20)
+    clickBackward.bg = (28,254,251)
 
 def ShowRecommendationsWindow(window, user):
     global systemdb, system
 
     if len(user.getFollowings()) > 0:
         system.integrateRecommendations(user)
-    recommendationsWindow = Window(window, title="Recommendations", height=700, width=500)
+    recommendationsWindow = Window(window, title="Recommendations", height=700, width=500, bg="white")
 
     recommendations = []
 
@@ -1098,7 +1117,7 @@ def ShowHomePageWindow(user, window):
     window.destroy()
     user.updateFollowings()
     setUpUnseenTitles(user)
-    app = App("Rate Movies!", height=250, width=350)
+    app = App("Rate Movies!", height=250, width=350, bg="white")
     app.when_closed=lambda:logOffUser(user, app)
 
     welcome = Text(app, text="Welcome " + user.getUsername() + "!")
@@ -1106,25 +1125,49 @@ def ShowHomePageWindow(user, window):
     setToRate_lbl = Text(app, text="Number of titles to rate:")
 
     setMoviesToRate = Combo(app, options=[5,10,15,20,25,30])
+    setMoviesToRate.bg = (3,168,229)
 
     buttonsBox = Box(app, height=100, width=500)
     #use of lambda function to prevent the button function accidently running automatically
     recommendationsButton = PushButton(buttonsBox, text="Recommended Titles", command=lambda:ShowRecommendationsWindow(app, user), align="left")
+    recommendationsButton.bg = (28,254,251)
     ratingsButton = PushButton(buttonsBox, text="Start Rating", command=lambda:initialiseRatingsWindow(app, user, setMoviesToRate.value), align="left")
+    ratingsButton.bg = (28,254,251)
     profileButton = PushButton(buttonsBox, text="See Profile", command=lambda:ShowProfileWindow(app, user), align="right")
+    profileButton.bg = (28,254,251)
 
     app.display()
-    
+
+def viewInstructions(window):
+    if isWindowOpen('instructionsWindow') == False:
+        instructionsWindow = Window(window, title="Instructions", bg="white")
+        instructionsWindow.when_closed = lambda:closeWindow('instructionsWindow', instructionsWindow)
+        instrcutions = Text(instructionsWindow, text="Instructions Will Go Here")
+
+def viewCredits(window):
+    if isWindowOpen('creditsWindow') == False:
+        creditsWindow = Window(window, title="Credits", bg="white")
+        creditsWindow.when_closed = lambda:closeWindow('creditsWindow', creditsWindow)
+        credits_text = Text(creditsWindow, text='''Developer: Jadesola Bejide\nInstituion: St Paul's Catholic School''')
+        
 
 def ShowLoginScreen():
     #sets up the layout for the log in screen
-    app = App("Login in to 'Rate Movies!'", height=250, width=300)
+    app = App("Login in to 'Rate Movies!'", height=250, width=300, bg="white")
+
+    #menu window so that users can view instructions
+    menubar = MenuBar(app, toplevel=["Instructions", "Credits"],
+                      options=[[["View Instructions", lambda:viewInstructions(app)]],[["Show Credits", lambda:viewCredits(app)]]])
+
+    menubar.bg = (3,168,229)
 
     #check to see if the user is new or existing
 
     welcome = Text(app, text='Welcome to "Rate Movies!"')
     new_users = PushButton(app, command=lambda:ShowNewUserWindow(app), text="New User")
+    new_users.bg = (28,254,251)
     existing_users = PushButton(app, command=lambda:ShowExistingUserWindow(app), text="Existing User")
+    existing_users.bg = (28,254,251)
 
     app.display()
 
@@ -1133,7 +1176,7 @@ def ShowNewUserWindow(app):
     #checks if the window is already open
     if isWindowOpen('newUserWindow') == False:
 
-        newUserWindow = Window(app, title="Create an account")
+        newUserWindow = Window(app, title="Create an account", bg="white")
         newUserWindow.when_closed = lambda:closeWindow('newUserWindow', newUserWindow)
         #sets up the layout for the new user window
         
@@ -1147,13 +1190,14 @@ def ShowNewUserWindow(app):
         password2_label = Text(newUserWindow, text="Enter password again: ")
         newUser_inputPasswordAgain = TextBox(newUserWindow, hide_text=True)
         newUser_createAccount = PushButton(newUserWindow, text="Create Account", command=lambda:createAccount(newUser_inputUsername.value, newUser_inputPassword.value, newUser_inputPasswordAgain.value, newUserWindow))
+        newUser_createAccount.bg = (28,254,251)
 
 def ShowExistingUserWindow(app):
     #checks if the window is already open
     if isWindowOpen('existingUserWindow') == True:
         pass
     else:
-        existingUserWindow = Window(app, title="Login into an existing account")
+        existingUserWindow = Window(app, title="Login into an existing account", bg="white")
         existingUserWindow.when_closed = lambda:closeWindow('existingUserWindow', existingUserWindow)
         #sets up the layout for the existing user window
         
@@ -1163,7 +1207,8 @@ def ShowExistingUserWindow(app):
         existingUser_inputUsername = TextBox(existingUserWindow)
         password_label = Text(existingUserWindow, text="Password: ")
         existingUser_inputPassword = TextBox(existingUserWindow, hide_text=True)
-        existingUser_createAccount = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
+        existingUser_LogIn = PushButton(existingUserWindow, text="Login", command=lambda:authenticateUser(existingUser_inputUsername.value, existingUser_inputPassword.value, existingUserWindow))
+        existingUser_LogIn.bg = (28,254,251)
 
 #Password and Username authentication subroutines
 def ShowInsufficientPasswordWindow(window):
