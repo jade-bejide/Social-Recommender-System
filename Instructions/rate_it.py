@@ -7,15 +7,6 @@ import math
 import requests
 import random
 from PIL import *
-import sys
-
-sys.setrecursionlimit(6400)
-
-##26/02/21 To Do:
-#Connect Software to Remote server so database can be accessed anywhere, 24/7
-
-#12/03/21 To Do:
-#Matrix Factorisation to calaculate unseen titles that should be added to the user's recommendations based on their similar followings.
 
 systemdb = mysql.connector.connect(
     host="sql11.freemysqlhosting.net",
@@ -25,8 +16,6 @@ systemdb = mysql.connector.connect(
 )
 
 c = systemdb.cursor(buffered=True)
-
-#Load in titles
 
 #Based on IMDb's top 250 and top rated TV shows
 imdbIDs = ['0805647', '0468569', '0167260', '0120737', '0133093', '0245429', '0110357', '0088763', '4154796',
@@ -152,7 +141,7 @@ def getUnseenTitles(user):
     return unseenTitles
 
 def createTitleObjects(dataset):
-    global system, Movie, TVShow
+    global system
     for item in dataset:
         title = convertIdToTitleObject(item)
         system.getUnseenQueue().enqueue(title)
@@ -693,6 +682,10 @@ class RecommenderSystem():
                 if title.getId() in idCheck:
                     c.execute('''UPDATE unseenTitles SET predictedRating = '{}' WHERE imdbId = '{}' AND userId = '{}';'''.format(predictedRating, title.getId(), user.getId()))
                     systemdb.commit()
+##                    if title.getRating(user) < 3:
+##                        c.execute('''UPDATE unseenTitles SET recommended = FALSE WHERE imdbId = '{}';'''.format(title.getId()))
+##                        systemdb.commit()
+##                        c.execute
                 else:
                     c.execute('''INSERT INTO unseenTitles (userId, imdbId, predictedRating, recommended) VALUES ('{}', '{}', '{}', FALSE)'''.format(user.getId(), title.getId(), predictedRating))
                     systemdb.commit()
@@ -982,6 +975,7 @@ def viewFollowers(user, window):
 
         txt_followers = Text(followersWindow, text="Your Followers", color=colorWidget('Text'))
         followersList = ListBox(followersWindow, items=user.getFollowers())
+        followersList.text_color = colorWidget('Text')
 
 def viewFollowings(user, window):
     global systemdb
@@ -1008,6 +1002,7 @@ def viewFollowings(user, window):
 
         txt_followings = Text(followingsWindow, text="Who You Follow", color=colorWidget('Text'))
         followersList = ListBox(followingsWindow, items=user.getFollowings())
+        followersList.text_color = colorWidget('Text')
 
 def refreshSearchResults(oldresults, newresults):
     #clears previous search results window
@@ -1041,6 +1036,7 @@ def searchUser(window, user, searchValue):
         resultsWindow = Window(window, title="Search Results", bg=colorWidget('Window'))
         resultsWindow.when_closed = lambda:closeWindow('resultsWindow', resultsWindow)
         usersList = ListBox(resultsWindow, items=users)
+        usersList.text_color = colorWidget('Text')
         searchResults = 1
         btn_follow = PushButton(resultsWindow, text="Follow", command=lambda:user.followUser(usersList.value))
         btn_follow.bg = colorWidget('Push Button')
