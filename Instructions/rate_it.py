@@ -129,6 +129,7 @@ def getUser2Id(user2):
 
 def getUnseenTitles(user):
     global systemdb
+    #Returns user's unseen titles from the database
     c = systemdb.cursor(buffered=True)
     unseenTitles_query = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
     unseenTitles_query = c.fetchall()
@@ -140,11 +141,19 @@ def getUnseenTitles(user):
 
     return unseenTitles
 
-def createTitleObjects(dataset):
+def addTitleToQueue(dataset):
     global system
+    #adds titles from a dataset of imdb id's
+    #whether its the imdbIDs list or the unseen titles result
+    #queried from the database to the recommender system's
+    #priority queue
     for item in dataset:
         title = convertIdToTitleObject(item)
-        system.getUnseenQueue().enqueue(title)
+        if title not in system.getUnseenQueue().getDataset():
+            system.getUnseenQueue().enqueue(title)
+
+    
+    
 
 def convertIdToTitleObject(titleId):
     #ocurrs when a title imdb id is passed into a function rather than a title object (i.e. when the system uses collaborative filtering to generate recommendations)
@@ -173,28 +182,21 @@ def setUpUnseenTitles(user):
 
     #checks whether the user has rated titles before
     unseenTitles = getUnseenTitles(user)
-    
+
     #if the user has rated titles before, the program loads in titles the user hasn't rated
     if unseenTitles != []:
-        createTitleObjects(unseenTitles)
+        addTitleToQueue(unseenTitles)
     else:
         #else it loads in all tiles
         random.shuffle(imdbIDs)
-        createTitleObjects(imdbIDs)
+        addTitleToQueue(imdbIDs)
 
     c.close()
 
-def getUnseenTitles(user):
-    unseenTitles_query = c.execute('''SELECT imdbId FROM unseenTitles WHERE userId='{}';'''.format(user.getId()))
-    unseenTitles_query = c.fetchall()
-    unseenTitles = []
-    for row in unseenTitles_query:
-        unseenTitles.append(row[0])
-
-    return unseenTitles
    
 def returnSimilarity(elem):
     return elem[1]
+
 #Users Class
 class Users(object):
     def __init__(self, username, password):
@@ -206,9 +208,9 @@ class Users(object):
         self._followers = []
         self._ratedGenres = []
         self._ratedTitles = []
-        self._genreScores = []
+        self._genreScores = {}
         #saves saved genre scores from database (needed when calculating nearest neighbours)
-        self._genreScoresExternal = []
+        self._genreScoresExternal = {}
         self._connectsTo = []
 
     def getId(self):
@@ -253,11 +255,10 @@ class Users(object):
         
         for row in genreScores_query:
             #saves the data internally in the system during the user's log in session
-            template["genre"] = row[0]
             template["averageRating"] = row[1]
             template["timesRated"] = row[2]
-            self.setGenreScoresExternal(template)
-            template = {"genre": None, "averageRating": None, "timesRated": None}
+            self.setGenreScoresExternal(row[0], template)
+            template = {"averageRating": None, "timesRated": None}
 
         c.close()
 
@@ -265,11 +266,11 @@ class Users(object):
         return self._genreScoresExternal
         
 
-    def setGenreScores(self, score):
-        self._genreScores.append(score)
+    def setGenreScores(self, genre, score):
+        self._genreScores[genre] = score
 
-    def setGenreScoresExternal(self, score):
-        self._genreScoresExternal.append(score)
+    def setGenreScoresExternal(self, genre, score):
+        self._genreScoresExternal[genre] = score
 
     def getUsername(self):
         return self._username
@@ -379,14 +380,10 @@ class Users(object):
         #saves recommendations externally
         c = systemdb.cursor(buffered=True)
 
-        unseenTitlesCheck = getUnseenTitles(self)
-
         #checks if the title is already in the database
-        idCheck = []
-        for item in unseenTitlesCheck:
-            idCheck.append(item[0])
-
-        if title.getId() in idCheck:
+        unseenTitlesCheck = getUnseenTitles(self)
+        
+        if title.getId() in unseenTitlesCheck:
             #updates unseen titles to include new values if so
             c.execute('''UPDATE unseenTitles SET predictedRating = '{}' AND recommended = TRUE WHERE imdbId = '{}' and userId = '{}';'''.format(predictedRating, title.getId(), self.getId()))
             systemdb.commit()
@@ -394,9 +391,10 @@ class Users(object):
             #otherwise adds the record entry into the database
             c.execute('''INSERT INTO unseenTitles (userId, imdbId, predictedRating, recommended) VALUES ('{}', '{}', '{}', TRUE);'''.format(self.getId(), title.getId(), predictedRating))
             systemdb.commit()
-
+            
         c.execute('''INSERT INTO recommendations (userId, imdbId) VALUES ('{}', '{}');'''.format(self.getId(), title.getId()))
         systemdb.commit()
+            
         c.close()
 
 #Titles Class
@@ -442,7 +440,7 @@ class Title(object):
         systemdb.commit()
         #when the title has been rated by the user, it is removed from the unseenTitles table in the database,
         #so that when the titles are next loaded into the system, the user does not rerate titles
-        c.execute('''DELETE FROM unseenTitles where imdbId = '{}' AND userID = '{}';'''.format(self.getId(), user.getId()))
+        c.execute('''DELETE FROM unseenTitles where imdbId = '{}' AND userId = '{}';'''.format(self.getId(), user.getId()))
         systemdb.commit()
         c.close()
 
@@ -541,11 +539,10 @@ class TitlePriorityQueue(TitleQueue):
         #works similar to getting a predicted rating for each title, but instead it is used to get a priority score for each title in the system's priority queue to be sorted dynamically
         for i in range(self.getRear(), self.getFront(), -1):
             for j in range(0, len(self.getDataset()[i].getGenres())):
-                for k in range(0, len(user.getRatedGenres())):
-                    if self.getDataset()[i].getGenres()[j] == user.getRatedGenres()[k]:
-                        for l in range(0, len(user.getGenreScores())):
-                            if user.getGenreScores()[l]["genre"] == self.getDataset()[i].getGenres()[j]:
-                                score += user.getGenreScores()[l]["averageRating"]
+                    if self.getDataset()[i].getGenres()[j] in user.getRatedGenres():
+                            score += user.getGenreScores()[self.getDataset()[i].getGenres()[j]]["averageRating"]
+
+            
 
             #produces an average of that score (doesn't necessarily have to fit a scale of 1-5)
             score = round(score / len(self.getDataset()[i].getGenres()))
@@ -643,15 +640,15 @@ class RecommenderSystem():
             ratedGenres.append(row[0])
 
         #create a queue object of remaining titles
-        for i in range(0, len(user.getGenreScores())):
-            user.getGenreScores()[i]["averageRating"] = user.getGenreScores()[i]["averageRating"] / user.getGenreScores()[i]["timesRated"]
-            if user.getGenreScores()[i]["genre"] in ratedGenres:
-                c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[i]["averageRating"], 2), user.getId(), user.getGenreScores()[i]["genre"]))
+        for genre in user.getGenreScores():
+            user.getGenreScores()[genre]["averageRating"] = user.getGenreScores()[genre]["averageRating"] / user.getGenreScores()[genre]["timesRated"]
+            if user.getGenreScores()[genre] in ratedGenres:
+                c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[genre]["averageRating"], 2), user.getId(), user.getGenreScores()[genre]))
                 systemdb.commit()
-                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[i]["timesRated"], user.getId(), user.getGenreScores()[i]["genre"]))
+                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[genre]["timesRated"], user.getId(), user.getGenreScores()[genre]))
                 systemdb.commit()
             else:
-                c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), user.getGenreScores()[i]["genre"], user.getGenreScores()[i]["averageRating"], user.getGenreScores()[i]["timesRated"]))
+                c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), genre, user.getGenreScores()[genre]["averageRating"], user.getGenreScores()[genre]["timesRated"]))
                 systemdb.commit()
         c.close()
             
@@ -661,9 +658,9 @@ class RecommenderSystem():
             unseenTitle_genres = title.getGenres()
             predictedRating = 0
 
-            for i in range(0, len(user.getGenreScores())):
-                if user.getGenreScores()[i]["genre"] in unseenTitle_genres:
-                    predictedRating += user.getGenreScores()[i]["averageRating"]
+            for genre in user.getGenreScores():
+                if user.getGenreScores()[genre] in unseenTitle_genres:
+                    predictedRating += user.getGenreScores()[genre]["averageRating"]
 
             predictedRating = round(((predictedRating / len(unseenTitle_genres)) * 0.85),2)
 
@@ -674,18 +671,10 @@ class RecommenderSystem():
                 #If the title will not be recommended to the user
                 c = systemdb.cursor(buffered=True)
                 unseenTitlesCheck = getUnseenTitles(user)
-                idCheck = []
-                #Checks the there is no record entry for that title id already in the database (to avoid data redundancies)
-                for item in unseenTitlesCheck:
-                    idCheck.append(item[0])
 
-                if title.getId() in idCheck:
+                if title.getId() in unseenTitlesCheck:
                     c.execute('''UPDATE unseenTitles SET predictedRating = '{}' WHERE imdbId = '{}' AND userId = '{}';'''.format(predictedRating, title.getId(), user.getId()))
                     systemdb.commit()
-##                    if title.getRating(user) < 3:
-##                        c.execute('''UPDATE unseenTitles SET recommended = FALSE WHERE imdbId = '{}';'''.format(title.getId()))
-##                        systemdb.commit()
-##                        c.execute
                 else:
                     c.execute('''INSERT INTO unseenTitles (userId, imdbId, predictedRating, recommended) VALUES ('{}', '{}', '{}', FALSE)'''.format(user.getId(), title.getId(), predictedRating))
                     systemdb.commit()
@@ -719,11 +708,12 @@ class RecommenderSystem():
         #the user's following, with the elements being the average
         #rating of that genre by both users respectively (or zero if user2 has not rated that genre)
         user1.createGenreScoresExternal()
-        for i in range(0, len(user1.getGenreScoresExternal())):
-            values_user1.append([user1.getGenreScoresExternal()[i]["averageRating"]])
-            if user1.getGenreScoresExternal()[i]["genre"] in user2_ratedGenres:
+
+        for genre in user1.getGenreScoresExternal:
+            values_user1.append([user1.getGenreScoresExternal()[genre]["averageRating"]])
+            if user1.getGenreScoresExternal()[genre] in user2_ratedGenres:
                 c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
-genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
+genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[genre]))
                 systemdb.commit()
                 genreRating_query = c.fetchall()
                 for row in genreRating_query:
@@ -835,14 +825,20 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
         temp = window.master
         window.destroy()
 
-        if system.getRatingTracking() >= int(rateCapacity):
-            #rating session is complete so the system resets its rating tracker
-            system.resetRateTracker()
-            #generates recommendations automatically when needed
-            system.generateRecommendations(user)
-        else:
-            #refreses the window
-            refreshWindow(temp, user, rateCapacity)
+        #resolving wishlist to add a 'penalty' to the genre scores of genres included
+        #in a title that has been skipped to inform the user that the user may be less
+        #familiar/less likely to enjpy similar titles (useful to heap sorting in the
+        #priority queue
+
+        #use of -3 as (sum of 1-5) / 5 = 3 and negative sampling is used
+
+        template = {"averageRating": 0, "timesRated": 0}
+        self.updateScores(user, title.getGenres(), template, -3)
+
+        print(system.getUnseenQueue().getRear())
+
+        #refreshes the window
+        refreshWindow(temp, user, rateCapacity)
         
 
     def saveRating(self, user, title, rating, window, rateCapacity):
@@ -854,33 +850,29 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[i]["genre"]))
 
         template = {"genre": None, "averageRating": 0, "timesRated": 0}
 
-        titleGenres = title.getGenres()
-
         #What does this do? Resolved (it updates genre scores)
-        self.updateScores(user, titleGenres, title, template)
+        
+        self.updateScores(user, title.getGenres(), template, title.getRating(user))
 
         temp = window.master
         window.destroy()
 
         refreshWindow(temp, user, rateCapacity)
 
-    def updateScores(self, user, ratedGenres, title, template):
-        #15/02/21 Logic error where rating is repeatedly added to dictionary due to for loop (Resolved)
+    def updateScores(self, user, ratedGenres, template, titleRating):
         for i in range(0, len(ratedGenres)):
             if ratedGenres[i] in user.getRatedGenres():
-                
-                for j in range(0, len(user.getGenreScores())):
-                    if user.getGenreScores()[j]["genre"] == ratedGenres[i]:
-                        user.getGenreScores()[j]["averageRating"] += title.getRating(user)
-                        user.getGenreScores()[j]["timesRated"] += 1
+                for genre in user.getGenreScores():
+                    if genre == ratedGenres[i]:
+                        user.getGenreScores()[genre]["averageRating"] += titleRating
+                        user.getGenreScores()[genre]["timesRated"] += 1
             else:
-                template["genre"] = ratedGenres[i]
-                template["averageRating"] = title.getRating(user)
+                template["averageRating"] = titleRating
                 template["timesRated"] += 1
-                user.setGenreScores(template)
+                user.setGenreScores(ratedGenres[i], template)
                 user.setRatedGenres(ratedGenres[i])
                 
-            template = {"genre": None, "averageRating": 0, "timesRated": 0}
+            template = {"averageRating": 0, "timesRated": 0}
 
     
 def refreshWindow(window, user, rateCapacity):
@@ -902,6 +894,7 @@ def showRatingsWindow(window, user, rateCapacity):
     title = system.getUnseenQueue().dequeue()
 
     ratingWindow = Window(window, title="Rating Movies", height=700, width=500, bg=colorWidget('Window'))
+    ratingWindow.when_closed = lambda:closeWindow('ratingWindow', ratingWindow)
 
     rateBox = Box(ratingWindow, align="bottom")
     titleBox = Box(ratingWindow, align="top")
@@ -914,6 +907,8 @@ def showRatingsWindow(window, user, rateCapacity):
     title_title = Text(titleBox, text=title.getTitle(), color=colorWidget('Text'))
     title_image = Picture(titleBox, image='coverImage.png')
     title_image.resize(300, 446)
+
+    print(system.getUnseenQueue().getRear())
 
     #Remember to change these buttons to star icons at the end of primary development
     star = "staricon.png"
@@ -933,11 +928,14 @@ def showRatingsWindow(window, user, rateCapacity):
 def initialiseRatingsWindow(window, user, rateCapacity):
     global system
 
-    if isWindowOpen('ratingWindow') == True:
-        #window is already open
-        pass
-    else:
-        showRatingsWindow(window, user, rateCapacity)
+    #current bug needs to be fixed, backtracking to previously working version
+##    if isWindowOpen('ratingWindow') == True:
+##        #window is already open
+##        pass
+##    else:
+##        showRatingsWindow(window, user, rateCapacity)
+
+    showRatingsWindow(window, user, rateCapacity)
 
     
 def logOffUser(user, window):
