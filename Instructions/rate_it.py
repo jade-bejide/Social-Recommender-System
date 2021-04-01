@@ -709,7 +709,7 @@ class RecommenderSystem():
         #rating of that genre by both users respectively (or zero if user2 has not rated that genre)
         user1.createGenreScoresExternal()
 
-        for genre in user1.getGenreScoresExternal:
+        for genre in user1.getGenreScoresExternal():
             values_user1.append([user1.getGenreScoresExternal()[genre]["averageRating"]])
             if user1.getGenreScoresExternal()[genre] in user2_ratedGenres:
                 c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
