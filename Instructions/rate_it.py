@@ -643,10 +643,10 @@ class RecommenderSystem():
             if genre in ratedGenres:
                 c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[genre]["averageRating"], 2), user.getId(), genre))
                 systemdb.commit()
-                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[genre]["timesRated"], user.getId(), genre))
+                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[genre]["timesRated"], 2), user.getId(), genre))
                 systemdb.commit()
             else:
-                c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), genre, user.getGenreScores()[genre]["averageRating"], user.getGenreScores()[genre]["timesRated"]))
+                c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), genre, round(user.getGenreScores()[genre]["averageRating"], 2), user.getGenreScores()[genre]["timesRated"]))
                 systemdb.commit()
         c.close()
             
@@ -677,8 +677,12 @@ class RecommenderSystem():
                 systemdb.commit()
                 removeRecommendations = c.fetchall()
 
+                
                 if removeRecommendations != []:
-                    c.execute('''DELETE FROM recommendations WHERE imdbId = '{}' AND userId = '{}';'''.format(removeRecommendations[0][0], user.getId()))
+                    titleToRemove = removeRecommendations[0][0]
+                    c.execute('''DELETE FROM recommendations WHERE imdbId = '{}' AND userId = '{}';'''.format(titleToRemove, user.getId()))
+                    systemdb.commit()
+                    c.execute('''UPDATE unseenTitles SET recommended = FALSE WHERE imdbId = '{}' AND userId = '{}';'''.format(titleToRemove, user.getId()))
                     systemdb.commit()
 
                 if title.getId() in unseenTitlesCheck:
@@ -838,10 +842,10 @@ genre = '{}';'''.format(user2Id, genre))
         #familiar/less likely to enjpy similar titles (useful to heap sorting in the
         #priority queue
 
-        #use of -0.5 and negative sampling is used
+        #use of -0.01 and negative sampling is used
 
         template = {"averageRating": 0, "timesRated": 0}
-        self.updateScores(user, title.getGenres(), template, -0.5)
+        self.updateScores(user, title.getGenres(), template, -0.01)
 
         #refreshes the window
         refreshWindow(temp, user, rateCapacity)
