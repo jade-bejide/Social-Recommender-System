@@ -119,8 +119,7 @@ def getUser2Id(user2):
     c = systemdb.cursor(buffered=True)
     c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user2))
     user2Id = c.fetchall()
-    for row in user2Id:
-        user2Id = row[0]
+    user2Id = user2Id[0][0]
 
 
     c.close()
@@ -336,8 +335,7 @@ class Users(object):
             c.execute('''SELECT userId FROM users WHERE username='{}';'''.format(user))
             systemdb.commit()
             userToUnfollow_id = c.fetchall()
-            for row in userToUnfollow_id:
-                userToUnfollow_id = row[0]
+            userToUnfollow_id = row[0][0]
 
             #removes records from both the userFollowers and userFollowings tables in the database
             c.execute('''DELETE FROM userFollowings WHERE userId ='{}' AND user_follows='{}';'''.format(self.getId(), userToUnfollow_id))
@@ -358,7 +356,7 @@ class Users(object):
             if row not in self.getFollowings():
                 self._followings.append(row[0])
                 #updates user similarity with their followings
-                system.updateUsersSimilarity(self, row[0])
+            system.updateUsersSimilarity(self, row[0])
 
         c.close()
 
@@ -642,10 +640,10 @@ class RecommenderSystem():
         #create a queue object of remaining titles
         for genre in user.getGenreScores():
             user.getGenreScores()[genre]["averageRating"] = user.getGenreScores()[genre]["averageRating"] / user.getGenreScores()[genre]["timesRated"]
-            if user.getGenreScores()[genre] in ratedGenres:
-                c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[genre]["averageRating"], 2), user.getId(), user.getGenreScores()[genre]))
+            if genre in ratedGenres:
+                c.execute('''UPDATE ratingsMatrix SET averageRating = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(round(user.getGenreScores()[genre]["averageRating"], 2), user.getId(), genre))
                 systemdb.commit()
-                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[genre]["timesRated"], user.getId(), user.getGenreScores()[genre]))
+                c.execute('''UPDATE ratingsMatrix SET timesRated = '{}' WHERE userId = '{}' AND genre = '{}';'''.format(user.getGenreScores()[genre]["timesRated"], user.getId(), genre))
                 systemdb.commit()
             else:
                 c.execute('''INSERT INTO ratingsMatrix (userId, genre, averageRating, timesRated) VALUES ('{}', '{}', '{}', '{}');'''.format(user.getId(), genre, user.getGenreScores()[genre]["averageRating"], user.getGenreScores()[genre]["timesRated"]))
@@ -659,18 +657,29 @@ class RecommenderSystem():
             predictedRating = 0
 
             for genre in user.getGenreScores():
-                if user.getGenreScores()[genre] in unseenTitle_genres:
+                if genre in unseenTitle_genres:
                     predictedRating += user.getGenreScores()[genre]["averageRating"]
 
-            predictedRating = round(((predictedRating / len(unseenTitle_genres)) * 0.85),2)
+            predictedRating = round((predictedRating / len(unseenTitle_genres)),2)
 
             if predictedRating >= 3:
                 user.setRecommendations(title, predictedRating)
             else:
-                #27/02/21 - WISHLIST: REMOVE TITLE FROM RECOMMENDATION IF THE UPDATED PREDICTED RATING IS NOW LESS THAN THREE
+                #27/02/21 - WISHLIST: REMOVE TITLE FROM RECOMMENDATION IF THE UPDATED PREDICTED RATING IS NOW LESS THAN THREE (Resolved 03/04/21)
                 #If the title will not be recommended to the user
                 c = systemdb.cursor(buffered=True)
                 unseenTitlesCheck = getUnseenTitles(user)
+
+                #if applicable, removes any titles that have a rating of less than 3 that were previously recommended from the
+                #recommdendations table
+
+                c.execute('''SELECT imdbId FROM recommendations WHERE imdbId = '{}' AND userId = '{}';'''.format(title.getId(), user.getId()))
+                systemdb.commit()
+                removeRecommendations = c.fetchall()
+
+                if removeRecommendations != []:
+                    c.execute('''DELETE FROM recommendations WHERE imdbId = '{}' AND userId = '{}';'''.format(removeRecommendations[0][0], user.getId()))
+                    systemdb.commit()
 
                 if title.getId() in unseenTitlesCheck:
                     c.execute('''UPDATE unseenTitles SET predictedRating = '{}' WHERE imdbId = '{}' AND userId = '{}';'''.format(predictedRating, title.getId(), user.getId()))
@@ -711,13 +720,12 @@ class RecommenderSystem():
 
         for genre in user1.getGenreScoresExternal():
             values_user1.append([user1.getGenreScoresExternal()[genre]["averageRating"]])
-            if user1.getGenreScoresExternal()[genre] in user2_ratedGenres:
+            if genre in user2_ratedGenres:
                 c.execute('''SELECT averageRating FROM ratingsMatrix WHERE userId = '{}' AND
-genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[genre]))
+genre = '{}';'''.format(user2Id, genre))
                 systemdb.commit()
                 genreRating_query = c.fetchall()
-                for row in genreRating_query:
-                    genreRating = row[0]
+                genreRating = genreRating_query[0][0]
                 values_user2.append([genreRating])
             else:
                 values_user2.append([0])
@@ -788,19 +796,19 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[genre]))
         unseen_titles = getUnseenTitles(user)
                
         template = {"title": None, "predictedRating": 0}
-        for row in unseen_titles:
-            template["title"] = row[0]
+        for title in unseen_titles:
+            template["title"] = title
             
             #if rated, gets followings rating of titles that the user is yet to rate
             c.execute('''SELECT usersRatedTitles.rating FROM usersRatedTitles JOIN userFollowings WHERE userFollowings.user_follows=usersRatedTitles.userId
-        AND usersRatedTitles.imdbId = '{}' AND userFollowings.userId = '{}';'''.format(row[0], user.getId()))
+        AND usersRatedTitles.imdbId = '{}' AND userFollowings.userId = '{}';'''.format(title, user.getId()))
             systemdb.commit()
 
             ratings_query = c.fetchall()
             
             #sums up all of these rating
-            for rating in ratings_query:
-                template["predictedRating"] += rating[0]
+
+            template["predictedRating"] += ratings_query[0][0]
 
             
 
@@ -830,12 +838,10 @@ genre = '{}';'''.format(user2Id, user1.getGenreScoresExternal()[genre]))
         #familiar/less likely to enjpy similar titles (useful to heap sorting in the
         #priority queue
 
-        #use of -3 as (sum of 1-5) / 5 = 3 and negative sampling is used
+        #use of -0.5 and negative sampling is used
 
         template = {"averageRating": 0, "timesRated": 0}
-        self.updateScores(user, title.getGenres(), template, -3)
-
-        print(system.getUnseenQueue().getRear())
+        self.updateScores(user, title.getGenres(), template, -0.5)
 
         #refreshes the window
         refreshWindow(temp, user, rateCapacity)
@@ -907,8 +913,6 @@ def showRatingsWindow(window, user, rateCapacity):
     title_title = Text(titleBox, text=title.getTitle(), color=colorWidget('Text'))
     title_image = Picture(titleBox, image='coverImage.png')
     title_image.resize(300, 446)
-
-    print(system.getUnseenQueue().getRear())
 
     #Remember to change these buttons to star icons at the end of primary development
     star = "staricon.png"
@@ -1185,7 +1189,7 @@ def ShowHomePageWindow(user, window):
     app.display()
 
 def viewInstructions(window):
-    instructions_text = '''Welcome to Rate It!\n \n A Social Recommender System that let's you customise which users can help influence what you are recommended.
+    instructions_text = '''Welcome to Rate It!\n \n A Social Recommender System that lets you customise which users can help influence what you are recommended.
 \n \n Colour Theme (Light or Dark Mode) \n \n You can choose the color theme for this application from the menu bar and this will be updated for all other windows.\n \nRating Titles\n
 You can set how many titles you wish to rate in one session in the home page window.\n Titles can be rated on a scale of 1-5 from left to right.
 If you haven't seen the title before, you can press the skip button.\n \n Viewing Recommendations\n
@@ -1407,11 +1411,10 @@ def authenticateUser(username, password, window):
         return False
 
     c = systemdb.cursor(buffered=True)
-    c.execute('''SELECT password FROM users WHERE username=username;''')
+    c.execute('''SELECT password FROM users WHERE username='{}';'''.format(username))
     systemdb.commit()
     passwordMatch_query = c.fetchall()
-    for row in passwordMatch_query:
-        passwordMatch = row[0]
+    passwordMatch = passwordMatch_query[0][0]
 
     c.close()
     #hash look up for the password
@@ -1424,7 +1427,7 @@ def authenticateUser(username, password, window):
         user = Users(username, password)
         c = systemdb.cursor(buffered=True)
         #notifies the program that the user has logged into the system
-        c.execute('''UPDATE users SET loggedIn = 1 WHERE username = '{}';'''.format(user.getUsername()))
+        c.execute('''UPDATE users SET loggedIn = 1 WHERE username = '{}';'''.format(username))
         systemdb.commit()
         c.close()
 
