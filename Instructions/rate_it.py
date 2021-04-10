@@ -803,24 +803,24 @@ genre = '{}';'''.format(user2Id, genre))
         for title in unseen_titles:
             template["title"] = title
             
-            #if rated, gets followings rating of titles that the user is yet to rate
+            #if rated, gets followings rating of titles that the user is yet to rate that its followings have rated
             c.execute('''SELECT usersRatedTitles.rating FROM usersRatedTitles JOIN userFollowings WHERE userFollowings.user_follows=usersRatedTitles.userId
         AND usersRatedTitles.imdbId = '{}' AND userFollowings.userId = '{}';'''.format(title, user.getId()))
             systemdb.commit()
 
             ratings_query = c.fetchall()
-            
-            #sums up all of these rating
+            if ratings_query != []:            
+                #sums up all of these rating
+                
+                template["predictedRating"] += ratings_query[0][0]
 
-            template["predictedRating"] += ratings_query[0][0]
+                
 
-            
-
-            #takes an average
-            template["predictedRating"] = round(template["predictedRating"]/len(user.getFollowings()), 2)
-            #if predicted rating is more than 3 it is added to the user's recommendations
-            if template["predictedRating"] >= 3:
-                user.setRecommendations(template["title"], template["predictedRating"])
+                #takes an average
+                template["predictedRating"] = round(template["predictedRating"]/len(user.getFollowings()), 2)
+                #if predicted rating is more than 3 it is added to the user's recommendations
+                if template["predictedRating"] >= 3:
+                    user.setRecommendations(template["title"], template["predictedRating"])
 
             template = {"title": None, "predictedRating": 0}
 
