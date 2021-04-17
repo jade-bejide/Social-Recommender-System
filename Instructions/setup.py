@@ -2,9 +2,10 @@ from cx_Freeze import setup, Executable
 
 base = None
 
-executables = [Executable("rate_it.py", base=base)]
+executables = [Executable("main.py", base=base)]
 
-includefiles = ["leftarrow.png", "rightarrow.png", "staricon.png"]
+includefiles = ["leftarrow.png", "rightarrow.png", "staricon.png", "themeControllers.py", "config.py", "mod.py", "windows.py",
+                "objectclasses.py"]
 includes = []
 packages = ["idna", "guizero", "mysql.connector", "json", "urllib", "numpy",
             "math", "requests", "random", "PIL", "sys", "tkinter"]
@@ -18,7 +19,7 @@ options = {
 }
 
 setup(
-    name = "<Social Recommender System>",
+    name = "Social Recommender System",
     options = options,
     version = "0.0.1",
     author = "Jadesola Bejide",
