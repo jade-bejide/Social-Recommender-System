@@ -28,7 +28,7 @@ Most people like to get movie or television show recommendations through word-of
 ### Installing the software
 
 1. Download the folder 'Instructions'
-2. Install the libraries <a href="https://pypi.org/project/mysql-connector-python/">MySQL Connector</a>, <a href="https://pypi.org/project/Pillow/">Pillow</a>, <a href="https://pypi.org/project/numpy/">Numpy</a>, <a href="https://pypi.org/project/requests/">Requests</a>
+2. Install the libraries <a href="https://pypi.org/project/guizero/">GuiZero</a>, <a href="https://pypi.org/project/mysql-connector-python/">MySQL Connector</a>, <a href="https://pypi.org/project/Pillow/">Pillow</a>, <a href="https://pypi.org/project/numpy/">Numpy</a>, <a href="https://pypi.org/project/requests/">Requests</a>
 3. Install <a href="https://pypi.org/project/cx-Freeze/">cx-Freeze</a>
 4. Open your command line and direct to the installed folder
 5. Run 'python3 setup.py build' (This may take several seconds)
