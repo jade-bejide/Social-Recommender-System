@@ -18,7 +18,6 @@ Most people like to get movie or television show recommendations through word-of
 * Want to be a beta tester? Feel free to report any issues, and add comments in the discussions section.
 * You will need a personal computer/laptop that has constant Internet Access
 * You will need <a href="https://www.python.org/downloads/">Python3</a> installed
-* If you don't have github, or want to give formal feedback please do so following this <a href="https://docs.google.com/forms/d/e/1FAIpQLScGBPRhQ8ZrVzrXfL15ZwKrV4o5wu1vWHz-0ulAAGe0BaUudw/viewform" target="_blank">link</a>
 
 ### Things To Note
 
