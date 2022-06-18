@@ -27,7 +27,7 @@ Most people like to get movie or television show recommendations through word-of
 
 ### To Do
 
-To use this project please create the file 'mysqlconnection.py' and structure it as follows
+To use this project please create the file ```mysqlconnection.py``` and structure it as follows
 
 ```python
 import mysql.connector
