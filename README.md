@@ -25,17 +25,34 @@ Most people like to get movie or television show recommendations through word-of
 * Due to the current limitations in accessing the IMDb database, titles are scrapped manually to the software rather than updated automatically, this means that -for now- there are a limited number of titles available to rate but this will hopefully be rectified/updated regularly in the future
 * This software is built using Python, therefore it may be slower than compiled software. Nevertheless, there is a 30 second guarantee of which, results will be loaded within 30 seconds. If they don't, feel free to report this!
 
+### To Do
+
+To use this project please create the file 'mysqlconnection.py' and structure it as follows
+
+```python
+import mysql.connector
+
+system = mysql.connector.connect(
+    host="host_uri",
+    user="user",
+    password="password",
+    database="databasename"
+)
+
+def getSystem():
+    return system
+```
+
 ### Installing the software
 
-1. Download the folder 'Instructions'
-2. Install the libraries <a href="https://pypi.org/project/guizero/">GuiZero</a>, <a href="https://pypi.org/project/mysql-connector-python/">MySQL Connector</a>, <a href="https://pypi.org/project/Pillow/">Pillow</a>, <a href="https://pypi.org/project/numpy/">Numpy</a>, <a href="https://pypi.org/project/requests/">Requests</a>
-3. Install <a href="https://pypi.org/project/cx-Freeze/">cx-Freeze</a>
-4. Open your command line and direct to the installed folder
-5. Run 'python3 setup.py build' (This may take several seconds)
-6. Open the installed folder in File Explorer
-7. Open Build
-8. Open the folder in build (labelled 'exe.' + the platform your workstation users)
-9. Open the executable program in the file
+1. Install the libraries <a href="https://pypi.org/project/guizero/">GuiZero</a>, <a href="https://pypi.org/project/mysql-connector-python/">MySQL Connector</a>, <a href="https://pypi.org/project/Pillow/">Pillow</a>, <a href="https://pypi.org/project/numpy/">Numpy</a>, <a href="https://pypi.org/project/requests/">Requests</a>
+2. Install <a href="https://pypi.org/project/cx-Freeze/">cx-Freeze</a>
+3. Open your command line and direct to the installed project
+4. Run 'python3 setup.py build' (This may take several seconds)
+5. Open the installed folder in File Explorer
+6. Open Build
+7. Open the folder in build (labelled 'exe.' + the platform your workstation uses)
+8. Open the executable program in the file
 
 
 ## Technologies

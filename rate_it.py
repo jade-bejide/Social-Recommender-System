@@ -8,12 +8,17 @@ import requests
 import random
 from PIL import *
 
-systemdb = mysql.connector.connect(
-    host="sql11.freemysqlhosting.net",
-    user="sql11399413",
-    password="EQ2GCCEILe",
-    database="sql11399413"
-)
+import os
+import sys
+import inspect
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir) 
+
+from mysqlconnection import getSystem
+
+systemdb = getSystem()
 
 c = systemdb.cursor(buffered=True)
 
@@ -284,6 +289,10 @@ class Users(object):
         self._connectsTo.append(connection)
 
         self._connectsTo.sort(reverse=True, key=returnSimilarity)
+
+    def rate_titles(self, title):
+        #show ratings window
+        showRatingsWindow(self, title)
 
     def followUser(self, user):
         global systemdb, system
@@ -647,8 +656,8 @@ class RecommenderSystem():
         c.close()
             
 
-        for j in range(self.getUnseenQueue().getFront(), self.getUnseenQueue().getRear()):
-            title = self.getUnseenQueue().getDataset()[j]
+        for j in range(system.getUnseenQueue().getFront(), system.getUnseenQueue().getRear()):
+            title = system.getUnseenQueue().getDataset()[j]
             unseenTitle_genres = title.getGenres()
             predictedRating = 0
 
@@ -799,24 +808,24 @@ genre = '{}';'''.format(user2Id, genre))
         for title in unseen_titles:
             template["title"] = title
             
-            #if rated, gets followings rating of titles that the user is yet to rate
+            #if rated, gets followings rating of titles that the user is yet to rate that its followings have rated
             c.execute('''SELECT usersRatedTitles.rating FROM usersRatedTitles JOIN userFollowings WHERE userFollowings.user_follows=usersRatedTitles.userId
         AND usersRatedTitles.imdbId = '{}' AND userFollowings.userId = '{}';'''.format(title, user.getId()))
             systemdb.commit()
 
             ratings_query = c.fetchall()
-            
-            #sums up all of these rating
+            if ratings_query != []:            
+                #sums up all of these rating
+                
+                template["predictedRating"] += ratings_query[0][0]
 
-            template["predictedRating"] += ratings_query[0][0]
+                
 
-            
-
-            #takes an average
-            template["predictedRating"] = round(template["predictedRating"]/len(user.getFollowings()), 2)
-            #if predicted rating is more than 3 it is added to the user's recommendations
-            if template["predictedRating"] >= 3:
-                user.setRecommendations(template["title"], template["predictedRating"])
+                #takes an average
+                template["predictedRating"] = round(template["predictedRating"]/len(user.getFollowings()), 2)
+                #if predicted rating is more than 3 it is added to the user's recommendations
+                if template["predictedRating"] >= 3:
+                    user.setRecommendations(template["title"], template["predictedRating"])
 
             template = {"title": None, "predictedRating": 0}
 

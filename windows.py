@@ -11,12 +11,17 @@ from objectclasses import *
 from themeControllers import *
 
 
-systemdb = mysql.connector.connect(
-    host="sql11.freemysqlhosting.net",
-    user="sql11399413",
-    password="EQ2GCCEILe",
-    database="sql11399413"
-)
+import os
+import sys
+import inspect
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir) 
+
+import mysqlconnection
+
+systemdb = getSystem()
 
 c = systemdb.cursor(buffered=True)
 

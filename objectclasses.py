@@ -5,12 +5,17 @@ from guizero import *
 import config
 import mod
 
-systemdb = mysql.connector.connect(
-    host="sql11.freemysqlhosting.net",
-    user="sql11399413",
-    password="EQ2GCCEILe",
-    database="sql11399413"
-)
+import os
+import sys
+import inspect
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir) 
+
+import mysqlconnection
+
+systemdb = getSystem()
 
 c = systemdb.cursor(buffered=True)
 
@@ -646,6 +651,7 @@ genre = '{}';'''.format(user2Id, genre))
             template = {"averageRating": 0, "timesRated": 0}
 
 
+#This is an example of a factory pattern - one point of call of creating title objects
 def convertIdToTitleObject(titleId):
     #ocurrs when a title imdb id is passed into a function rather than a title object (i.e. when the system uses collaborative filtering to generate recommendations)
     #scraps the data of the imdb
